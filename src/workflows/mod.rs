@@ -96,9 +96,9 @@ pub fn run_think(problem: &str, config: &PraxisConfig) -> Result<(), String> {
     );
 
     let token_label = if metadata.tokens_input_estimated || metadata.tokens_output_estimated {
-        "tokens:".to_string()
+        "tokens~:"
     } else {
-        "tokens:".to_string()
+        "tokens: "
     };
     let token_suffix = if metadata.tokens_input_estimated || metadata.tokens_output_estimated {
         " (estimated)".dimmed().to_string()
@@ -127,7 +127,13 @@ pub fn run_think(problem: &str, config: &PraxisConfig) -> Result<(), String> {
     Ok(())
 }
 
-fn print_output(problem: &str, output: &str) {
+/// Returns true for lines like "1. foo", "10. bar", "99. baz".
+fn is_numbered_item(line: &str) -> bool {
+    let rest = line.trim_start_matches(|c: char| c.is_ascii_digit());
+    rest != line && rest.starts_with(". ")
+}
+
+pub fn print_output(problem: &str, output: &str) {
     println!("{}", problem.bold().white());
     println!();
 
@@ -138,10 +144,52 @@ fn print_output(problem: &str, output: &str) {
         } else if line.starts_with("- ") || line.starts_with("* ") {
             let content = &line[2..];
             println!("  {} {}", "•".dimmed(), content);
-        } else if line.len() > 2 && line.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) && line.chars().nth(1) == Some('.') {
+        } else if is_numbered_item(line) {
             println!("  {}", line);
         } else {
             println!("{}", line);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- is_numbered_item ---
+
+    #[test]
+    fn numbered_item_single_digit() {
+        assert!(is_numbered_item("1. First option"));
+        assert!(is_numbered_item("9. Last single digit"));
+    }
+
+    #[test]
+    fn numbered_item_multi_digit() {
+        assert!(is_numbered_item("10. Tenth option"));
+        assert!(is_numbered_item("42. Some option"));
+        assert!(is_numbered_item("100. One hundredth"));
+    }
+
+    #[test]
+    fn numbered_item_rejects_non_numeric_start() {
+        assert!(!is_numbered_item("- bullet"));
+        assert!(!is_numbered_item("## heading"));
+        assert!(!is_numbered_item("plain text"));
+        assert!(!is_numbered_item(""));
+    }
+
+    #[test]
+    fn numbered_item_requires_dot_space() {
+        // Digit followed by dot but no space — not a list item
+        assert!(!is_numbered_item("1.option"));
+        // Digit with space but no dot — not a list item
+        assert!(!is_numbered_item("1 option"));
+    }
+
+    #[test]
+    fn numbered_item_rejects_bare_number() {
+        assert!(!is_numbered_item("1"));
+        assert!(!is_numbered_item("10"));
     }
 }

@@ -51,7 +51,10 @@ pub fn generate_response(
     user_prompt: &str,
     config: &PraxisConfig,
 ) -> Result<LlmResponse, String> {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| format!("error: Failed to build HTTP client: {}", e))?;
 
     let request_body = ChatRequest {
         model: config.llm_model.clone(),
@@ -77,15 +80,14 @@ pub fn generate_response(
     }
 
     let response = req.send().map_err(|e| {
-        let hint = if e.is_connect() {
+        if e.is_connect() {
             format!(
                 "error: Failed to connect to LLM at {}: {}\nHint: Is your local model running? (e.g., `ollama serve`)",
                 config.llm_api_base, e
             )
         } else {
             format!("error: LLM request failed: {}", e)
-        };
-        hint
+        }
     })?;
 
     let status = response.status();
