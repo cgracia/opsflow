@@ -10,6 +10,10 @@ pub struct RunPaths {
     pub metadata: PathBuf,
 }
 
+pub struct ArtifactContext<'a> {
+    pub summary_markdown: &'a str,
+}
+
 fn run_dir(praxis_dir: &Path) -> PathBuf {
     praxis_dir.join("runs")
 }
@@ -24,6 +28,7 @@ pub fn save_run(
     short_id: &str,
     command: &str,
     problem: &str,
+    context: Option<ArtifactContext<'_>>,
     output: &str,
     metadata: &RunMetadata,
 ) -> Result<RunPaths, String> {
@@ -37,10 +42,7 @@ pub fn save_run(
 
     // Build markdown artifact
     let frontmatter = build_frontmatter(metadata);
-    let artifact_content = format!(
-        "---\n{}\n---\n\n# {}\n\n{}",
-        frontmatter, problem, output
-    );
+    let artifact_content = build_artifact_content(&frontmatter, problem, context, output);
 
     fs::write(&artifact_path, &artifact_content)
         .map_err(|e| format!("error: Failed to write artifact: {}", e))?;
@@ -56,6 +58,25 @@ pub fn save_run(
         artifact: artifact_path,
         metadata: metadata_path,
     })
+}
+
+fn build_artifact_content(
+    frontmatter: &str,
+    problem: &str,
+    context: Option<ArtifactContext<'_>>,
+    output: &str,
+) -> String {
+    let mut doc = format!("---\n{}\n---\n\n# Problem\n\n{}\n", frontmatter, problem);
+
+    if let Some(context) = context {
+        doc.push_str("\n## Context Used\n\n");
+        doc.push_str(context.summary_markdown);
+        doc.push('\n');
+    }
+
+    doc.push_str("\n## Response\n\n");
+    doc.push_str(output);
+    doc
 }
 
 /// Wrap a string in YAML double-quotes, escaping backslashes and double-quotes.
@@ -161,7 +182,7 @@ mod tests {
         let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
         let meta = make_meta("qwen3.5:9B");
 
-        let paths = save_run(dir.path(), &ts, "abcd1234", "think", "my problem", "my output", &meta)
+        let paths = save_run(dir.path(), &ts, "abcd1234", "think", "my problem", None, "my output", &meta)
             .unwrap();
 
         assert!(paths.artifact.exists());
@@ -174,13 +195,40 @@ mod tests {
         let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
         let meta = make_meta("qwen3.5:9B");
 
-        let paths = save_run(dir.path(), &ts, "abcd1234", "think", "my problem", "my output", &meta)
+        let paths = save_run(dir.path(), &ts, "abcd1234", "think", "my problem", None, "my output", &meta)
             .unwrap();
 
         let content = fs::read_to_string(&paths.artifact).unwrap();
+        assert!(content.contains("# Problem"));
         assert!(content.contains("my problem"));
+        assert!(content.contains("## Response"));
         assert!(content.contains("my output"));
         assert!(content.starts_with("---\n"));
+    }
+
+    #[test]
+    fn save_run_artifact_can_include_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
+        let meta = make_meta("qwen3.5:9B");
+
+        let paths = save_run(
+            dir.path(),
+            &ts,
+            "abcd1234",
+            "think",
+            "my problem",
+            Some(ArtifactContext {
+                summary_markdown: "- `Cargo.toml`\n- `src/main.rs`",
+            }),
+            "my output",
+            &meta,
+        )
+        .unwrap();
+
+        let content = fs::read_to_string(&paths.artifact).unwrap();
+        assert!(content.contains("## Context Used"));
+        assert!(content.contains("Cargo.toml"));
     }
 
     #[test]
@@ -189,7 +237,7 @@ mod tests {
         let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
         let meta = make_meta("qwen3.5:9B");
 
-        let paths = save_run(dir.path(), &ts, "abcd1234", "think", "problem", "output", &meta)
+        let paths = save_run(dir.path(), &ts, "abcd1234", "think", "problem", None, "output", &meta)
             .unwrap();
 
         let json_str = fs::read_to_string(&paths.metadata).unwrap();

@@ -69,6 +69,9 @@ Requires Rust 1.70+ and an OpenAI-compatible LLM endpoint. [Ollama](https://olla
 ollama serve && ollama pull qwen3.5:9B
 praxis think "What database should I use for this project?"
 
+# Ground the answer in the current repo
+praxis think --repo "What database should I use for this project?"
+
 # Remote provider
 export PRAXIS_LLM_API_BASE="https://api.openai.com/v1"
 export PRAXIS_LLM_MODEL="gpt-4o"
@@ -81,7 +84,7 @@ praxis think "Should we build or buy the billing system?"
 Each `praxis think` run:
 
 1. Sends your problem to an LLM with a structured system prompt that enforces a specific output format (Problem Framing → Constraints → Options → Trade-offs → Recommendation)
-2. Displays the formatted result in the terminal
+2. Streams the result in interactive terminals by default, or prints the full response at the end in non-streaming mode
 3. Saves a **markdown artifact** with YAML frontmatter to `~/.praxis/runs/`
 4. Saves a **JSON metadata file** alongside it — run ID, model, tokens in/out, duration, timestamp
 
@@ -115,9 +118,9 @@ llm_max_output_tokens = 700
 
 ## Local model notes
 
-`praxis` currently uses a non-streaming OpenAI-compatible HTTP request. That means Ollama computes the full response and `praxis` prints it after completion.
+`praxis` streams by default when writing to an interactive terminal. That makes local models feel much better for humans, even when total completion time is still significant.
 
-By contrast, `ollama run ...` streams tokens directly in the terminal, so it feels more interactive even when total generation time is similar.
+When stdout is not a TTY, `praxis` defaults to non-streaming output so scripts and tool integrations get a stable full response.
 
 If local runs feel too slow:
 
@@ -126,11 +129,32 @@ export PRAXIS_LLM_TIMEOUT_SECS=900
 export PRAXIS_LLM_MAX_OUTPUT_TOKENS=400
 ```
 
+To override the default behavior:
+
+```bash
+praxis think --no-stream "What database should I use?"
+praxis think --stream "What database should I use?"
+```
+
 To compare raw model behavior outside `praxis`:
 
 ```bash
 ollama run qwen3.5:9B "What database should I use for this project?"
 ```
+
+## Local context
+
+`praxis think` is context-free by default. It does not silently inspect your filesystem.
+
+To explicitly ground a run in the current repository:
+
+```bash
+praxis think --repo "What database should I use for this project?"
+```
+
+When `--repo` is enabled, Praxis reads a small, filtered set of project files from the current working directory, excludes common secret-bearing paths and files, injects that material into the prompt, and records the included file list in the saved artifact.
+
+This is intentionally explicit. Local context is a declared input, not hidden state.
 
 ## Artifacts
 
@@ -150,6 +174,8 @@ Files are plain text — searchable with `grep`, parseable with `jq`, composable
 | Command | Description |
 |---|---|
 | `praxis think <problem>` | Run the structured thinking workflow |
+| `praxis think --repo <problem>` | Run with explicit context from the current repo |
+| `praxis think --no-stream <problem>` | Disable streaming output |
 | `praxis --version` | Print version |
 | `praxis --help` | Print help |
 

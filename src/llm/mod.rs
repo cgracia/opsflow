@@ -1,3 +1,5 @@
+use std::io::{BufRead, BufReader, Write};
+
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
@@ -15,14 +17,22 @@ struct ChatRequest {
     model: String,
     messages: Vec<Message>,
     temperature: f32,
+    stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
 }
 
 #[derive(Serialize)]
 struct Message {
     role: String,
     content: String,
+}
+
+#[derive(Serialize)]
+struct StreamOptions {
+    include_usage: bool,
 }
 
 #[derive(Deserialize)]
@@ -43,15 +53,39 @@ struct AssistantMessage {
 }
 
 #[derive(Deserialize)]
+struct StreamChatResponse {
+    choices: Vec<StreamChoice>,
+    usage: Option<Usage>,
+    model: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct StreamChoice {
+    delta: StreamDelta,
+}
+
+#[derive(Deserialize)]
+struct StreamDelta {
+    content: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct Usage {
     prompt_tokens: Option<u64>,
     completion_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct LlmRequestOptions {
+    pub stream: bool,
 }
 
 pub fn generate_response(
     system_prompt: &str,
     user_prompt: &str,
     config: &PraxisConfig,
+    options: LlmRequestOptions,
+    mut on_chunk: impl FnMut(&str) -> Result<(), String>,
 ) -> Result<LlmResponse, String> {
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(config.llm_timeout_secs))
@@ -71,7 +105,9 @@ pub fn generate_response(
             },
         ],
         temperature: 0.3,
+        stream: options.stream,
         max_tokens: config.llm_max_output_tokens,
+        stream_options: options.stream.then_some(StreamOptions { include_usage: true }),
     };
 
     let url = format!("{}/chat/completions", config.llm_api_base.trim_end_matches('/'));
@@ -108,6 +144,10 @@ pub fn generate_response(
         return Err(format!("error: LLM API returned status {}: {}", status, body));
     }
 
+    if options.stream {
+        return read_streaming_response(response, config, &mut on_chunk);
+    }
+
     let chat_response: ChatResponse = response
         .json()
         .map_err(|e| format!("error: Failed to parse LLM response: {}", e))?;
@@ -126,6 +166,70 @@ pub fn generate_response(
     };
 
     let model = chat_response.model.unwrap_or_else(|| config.llm_model.clone());
+
+    Ok(LlmResponse {
+        text,
+        model,
+        input_tokens,
+        output_tokens,
+    })
+}
+
+fn read_streaming_response(
+    response: reqwest::blocking::Response,
+    config: &PraxisConfig,
+    on_chunk: &mut impl FnMut(&str) -> Result<(), String>,
+) -> Result<LlmResponse, String> {
+    let mut reader = BufReader::new(response);
+    let mut line = String::new();
+    let mut text = String::new();
+    let mut model = config.llm_model.clone();
+    let mut input_tokens = None;
+    let mut output_tokens = None;
+
+    loop {
+        line.clear();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|e| format!("error: Failed to read streaming response: {}", e))?;
+
+        if bytes == 0 {
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() || !trimmed.starts_with("data: ") {
+            continue;
+        }
+
+        let payload = trimmed.trim_start_matches("data: ").trim();
+        if payload == "[DONE]" {
+            break;
+        }
+
+        let chunk: StreamChatResponse = serde_json::from_str(payload)
+            .map_err(|e| format!("error: Failed to parse streaming LLM chunk: {}", e))?;
+
+        if let Some(chunk_model) = chunk.model {
+            model = chunk_model;
+        }
+
+        if let Some(usage) = chunk.usage {
+            input_tokens = usage.prompt_tokens.or(input_tokens);
+            output_tokens = usage.completion_tokens.or(output_tokens);
+        }
+
+        for choice in chunk.choices {
+            if let Some(content) = choice.delta.content {
+                on_chunk(&content)?;
+                text.push_str(&content);
+            }
+        }
+    }
+
+    std::io::stdout()
+        .flush()
+        .map_err(|e| format!("error: Failed to flush streaming output: {}", e))?;
 
     Ok(LlmResponse {
         text,
