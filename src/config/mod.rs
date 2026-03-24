@@ -7,6 +7,8 @@ pub struct PraxisConfig {
     pub llm_api_base: String,
     pub llm_model: String,
     pub llm_api_key: Option<String>,
+    pub llm_timeout_secs: u64,
+    pub llm_max_output_tokens: Option<u32>,
     pub praxis_dir: PathBuf,
 }
 
@@ -14,8 +16,10 @@ impl Default for PraxisConfig {
     fn default() -> Self {
         PraxisConfig {
             llm_api_base: "http://localhost:11434/v1".to_string(),
-            llm_model: "llama3".to_string(),
+            llm_model: "qwen3.5:9B".to_string(),
             llm_api_key: None,
+            llm_timeout_secs: 600,
+            llm_max_output_tokens: Some(700),
             praxis_dir: default_praxis_dir(),
         }
     }
@@ -32,6 +36,8 @@ struct ConfigFile {
     llm_api_base: Option<String>,
     llm_model: Option<String>,
     llm_api_key: Option<String>,
+    llm_timeout_secs: Option<u64>,
+    llm_max_output_tokens: Option<u32>,
 }
 
 pub fn load_config() -> PraxisConfig {
@@ -58,6 +64,12 @@ pub fn load_config() -> PraxisConfig {
                         if let Some(v) = file_config.llm_api_key {
                             config.llm_api_key = Some(v);
                         }
+                        if let Some(v) = file_config.llm_timeout_secs {
+                            config.llm_timeout_secs = v;
+                        }
+                        if let Some(v) = file_config.llm_max_output_tokens {
+                            config.llm_max_output_tokens = Some(v);
+                        }
                     }
                     Err(e) => {
                         eprintln!("warning: failed to parse config file {}: {}", config_path.display(), e);
@@ -79,6 +91,21 @@ pub fn load_config() -> PraxisConfig {
     }
     if let Ok(v) = std::env::var("PRAXIS_LLM_API_KEY") {
         config.llm_api_key = Some(v);
+    }
+    if let Ok(v) = std::env::var("PRAXIS_LLM_TIMEOUT_SECS") {
+        match v.parse::<u64>() {
+            Ok(parsed) => config.llm_timeout_secs = parsed,
+            Err(_) => eprintln!("warning: invalid PRAXIS_LLM_TIMEOUT_SECS value {:?}; expected integer seconds", v),
+        }
+    }
+    if let Ok(v) = std::env::var("PRAXIS_LLM_MAX_OUTPUT_TOKENS") {
+        match v.parse::<u32>() {
+            Ok(parsed) => config.llm_max_output_tokens = Some(parsed),
+            Err(_) => eprintln!(
+                "warning: invalid PRAXIS_LLM_MAX_OUTPUT_TOKENS value {:?}; expected integer token count",
+                v
+            ),
+        }
     }
 
     config

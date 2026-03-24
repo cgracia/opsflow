@@ -1,4 +1,4 @@
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,6 +64,7 @@ pub fn build_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
     fn estimate_tokens_empty() {
@@ -95,7 +96,7 @@ mod tests {
             "think",
             "my problem",
             "my output",
-            "llama3",
+            "qwen3.5:9B",
             Some(50),
             Some(100),
             42,
@@ -111,7 +112,7 @@ mod tests {
         let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let input = "abcd"; // 4 chars → 1 token
         let output = "abcde"; // 5 chars → 2 tokens
-        let meta = build_metadata("id", ts, "think", input, output, "llama3", None, None, 10);
+        let meta = build_metadata("id", ts, "think", input, output, "qwen3.5:9B", None, None, 10);
         assert_eq!(meta.tokens_input, 1);
         assert_eq!(meta.tokens_output, 2);
         assert!(meta.tokens_input_estimated);

@@ -15,6 +15,8 @@ struct ChatRequest {
     model: String,
     messages: Vec<Message>,
     temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -52,7 +54,7 @@ pub fn generate_response(
     config: &PraxisConfig,
 ) -> Result<LlmResponse, String> {
     let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(std::time::Duration::from_secs(config.llm_timeout_secs))
         .build()
         .map_err(|e| format!("error: Failed to build HTTP client: {}", e))?;
 
@@ -69,6 +71,7 @@ pub fn generate_response(
             },
         ],
         temperature: 0.3,
+        max_tokens: config.llm_max_output_tokens,
     };
 
     let url = format!("{}/chat/completions", config.llm_api_base.trim_end_matches('/'));
@@ -80,7 +83,16 @@ pub fn generate_response(
     }
 
     let response = req.send().map_err(|e| {
-        if e.is_connect() {
+        if e.is_timeout() {
+            format!(
+                "error: LLM request timed out after {}s while calling {} with model {}\nHint: local models can take longer on first-token and full completion latency. Try increasing PRAXIS_LLM_TIMEOUT_SECS or lowering PRAXIS_LLM_MAX_OUTPUT_TOKENS.\nHint: to benchmark the raw model outside praxis, run: ollama run {} {:?}",
+                config.llm_timeout_secs,
+                config.llm_api_base,
+                config.llm_model,
+                config.llm_model,
+                user_prompt
+            )
+        } else if e.is_connect() {
             format!(
                 "error: Failed to connect to LLM at {}: {}\nHint: Is your local model running? (e.g., `ollama serve`)",
                 config.llm_api_base, e

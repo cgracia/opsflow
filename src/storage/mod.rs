@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 
 use crate::observability::RunMetadata;
 
@@ -81,6 +81,7 @@ fn build_frontmatter(meta: &RunMetadata) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
     use crate::observability::build_metadata;
 
     fn make_meta(model: &str) -> RunMetadata {
@@ -97,8 +98,8 @@ mod tests {
 
     #[test]
     fn yaml_quote_colon_in_value() {
-        // "llama3:8b" is common Ollama syntax and must not break YAML
-        assert_eq!(yaml_quote("llama3:8b"), "\"llama3:8b\"");
+        // Model tags with colons must remain valid YAML strings.
+        assert_eq!(yaml_quote("qwen3.5:9B"), "\"qwen3.5:9B\"");
     }
 
     #[test]
@@ -123,14 +124,14 @@ mod tests {
 
     #[test]
     fn frontmatter_quotes_model_with_colon() {
-        let meta = make_meta("llama3:8b");
+        let meta = make_meta("qwen3.5:9B");
         let fm = build_frontmatter(&meta);
-        assert!(fm.contains("model: \"llama3:8b\""));
+        assert!(fm.contains("model: \"qwen3.5:9B\""));
     }
 
     #[test]
     fn frontmatter_contains_all_fields() {
-        let meta = make_meta("llama3");
+        let meta = make_meta("qwen3.5:9B");
         let fm = build_frontmatter(&meta);
         assert!(fm.contains("run_id:"));
         assert!(fm.contains("command:"));
@@ -145,7 +146,7 @@ mod tests {
 
     #[test]
     fn frontmatter_numeric_fields_unquoted() {
-        let meta = make_meta("llama3");
+        let meta = make_meta("qwen3.5:9B");
         let fm = build_frontmatter(&meta);
         assert!(fm.contains("duration_ms: 100"));
         assert!(fm.contains("tokens_input: 10"));
@@ -158,7 +159,7 @@ mod tests {
     fn save_run_creates_files() {
         let dir = tempfile::tempdir().unwrap();
         let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
-        let meta = make_meta("llama3");
+        let meta = make_meta("qwen3.5:9B");
 
         let paths = save_run(dir.path(), &ts, "abcd1234", "think", "my problem", "my output", &meta)
             .unwrap();
@@ -171,7 +172,7 @@ mod tests {
     fn save_run_artifact_contains_problem_and_output() {
         let dir = tempfile::tempdir().unwrap();
         let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
-        let meta = make_meta("llama3");
+        let meta = make_meta("qwen3.5:9B");
 
         let paths = save_run(dir.path(), &ts, "abcd1234", "think", "my problem", "my output", &meta)
             .unwrap();
@@ -186,14 +187,14 @@ mod tests {
     fn save_run_metadata_is_valid_json() {
         let dir = tempfile::tempdir().unwrap();
         let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
-        let meta = make_meta("llama3");
+        let meta = make_meta("qwen3.5:9B");
 
         let paths = save_run(dir.path(), &ts, "abcd1234", "think", "problem", "output", &meta)
             .unwrap();
 
         let json_str = fs::read_to_string(&paths.metadata).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(parsed["model"], "llama3");
+        assert_eq!(parsed["model"], "qwen3.5:9B");
         assert_eq!(parsed["command"], "think");
     }
 }
