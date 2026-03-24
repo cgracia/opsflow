@@ -1,33 +1,58 @@
 # Praxis
 
-A CLI tool for structured reasoning. Give it a problem; get back a concise, decision-oriented analysis powered by a local or remote LLM.
+Treat AI like a system, not a conversation.
+
+Praxis is a terminal-native tool for structured reasoning with built-in observability. Give it a problem; get back a decision-oriented analysis, a persistent artifact, and full metadata on what happened — model, tokens, cost, duration.
+
+Every interaction is a **workflow run**. Every run follows a structured method, produces a reusable artifact, and generates metadata. Over time, this creates a history of thinking you can search, reference, and optimise.
 
 ```
 $ praxis think "Should I rewrite the auth service in Rust?"
 
 Thinking...
 
-[Problem Framing]
-...
-[Recommendation]
-...
+Should I rewrite the auth service in Rust?
+
+Problem Framing
+The current auth service works but is a maintenance burden...
+
+Constraints
+  • Team has no Rust experience
+  • Auth is security-critical — rewrites introduce risk
+  • Current service handles 2k req/s without issues
+
+Options
+  1. Full rewrite in Rust
+  2. Incremental migration — extract hot paths only
+  3. Keep current service, invest in test coverage
+
+Trade-offs
+  Option 1: Maximum long-term perf / highest risk, longest timeline
+  Option 2: Targeted gains / partial complexity, two codebases during transition
+  Option 3: Lowest risk / doesn't address maintenance burden
+
+Recommendation
+  Option 2. Extract the token validation hot path first...
 
 ────────────────────────────────────────────────────────────
   run id:  a3f9b12c
-  model:   llama3:8b
+  model:   qwen3.5:9B
   time:    4231ms
   tokens:  312 in / 189 out
-  saved:   ~/.praxis/runs/20240615-120000-a3f9b12c-think.md
-  meta:    ~/.praxis/runs/20240615-120000-a3f9b12c-think.meta.json
+  saved:   ~/.praxis/runs/20260324-120000-a3f9b12c-think.md
+  meta:    ~/.praxis/runs/20260324-120000-a3f9b12c-think.meta.json
 ────────────────────────────────────────────────────────────
 ```
 
-## Requirements
+## Why
 
-- Rust 1.70+
-- An OpenAI-compatible LLM endpoint — [Ollama](https://ollama.com/) is the zero-config default
+Chat-based AI interaction is unstructured, ephemeral, and opaque. You get an answer, it disappears, and you have no idea what it cost or whether a different model would have done better.
 
-## Installation
+Praxis makes AI usage **structured** (defined workflows, not freeform prompts), **persistent** (every run saved as a searchable artifact), and **observable** (token counts, model, duration, cost — tracked from day one).
+
+See [VISION.md](VISION.md) for the full thesis and roadmap.
+
+## Install
 
 ```bash
 git clone https://github.com/cgracia/praxis
@@ -35,68 +60,111 @@ cd praxis
 cargo install --path .
 ```
 
+Requires Rust 1.70+ and an OpenAI-compatible LLM endpoint. [Ollama](https://ollama.com/) is the zero-config default.
+
 ## Quick start
 
 ```bash
-# Start Ollama (if using local models)
-ollama serve
-ollama pull llama3
-
-# Run
+# Local model (default)
+ollama serve && ollama pull qwen3.5:9B
 praxis think "What database should I use for this project?"
+
+# Remote provider
+export PRAXIS_LLM_API_BASE="https://api.openai.com/v1"
+export PRAXIS_LLM_MODEL="gpt-4o"
+export PRAXIS_LLM_API_KEY="sk-..."
+praxis think "Should we build or buy the billing system?"
 ```
+
+## How it works
+
+Each `praxis think` run:
+
+1. Sends your problem to an LLM with a structured system prompt that enforces a specific output format (Problem Framing → Constraints → Options → Trade-offs → Recommendation)
+2. Displays the formatted result in the terminal
+3. Saves a **markdown artifact** with YAML frontmatter to `~/.praxis/runs/`
+4. Saves a **JSON metadata file** alongside it — run ID, model, tokens in/out, duration, timestamp
+
+The artifacts accumulate into a personal knowledge base of structured reasoning. The metadata accumulates into a dataset of your AI usage.
 
 ## Configuration
 
 Praxis resolves config in this order (highest priority last):
 
-1. Built-in defaults (Ollama at `localhost:11434`, model `llama3`)
-2. `~/.praxis/config.toml`
+1. Built-in defaults — Ollama at `localhost:11434`, model `qwen3.5:9B`
+2. Config file — `~/.praxis/config.toml`
 3. Environment variables
-
-### Config file
 
 ```toml
 # ~/.praxis/config.toml
 llm_api_base = "http://localhost:11434/v1"
-llm_model    = "llama3:8b"
+llm_model    = "qwen3.5:9B"
 llm_api_key  = ""          # leave empty for Ollama
+llm_timeout_secs = 600
+llm_max_output_tokens = 700
 ```
 
-### Environment variables
+| Variable | Description |
+|---|---|
+| `PRAXIS_LLM_API_BASE` | API base URL |
+| `PRAXIS_LLM_MODEL` | Model name |
+| `PRAXIS_LLM_API_KEY` | Bearer token (optional for local models) |
+| `PRAXIS_LLM_TIMEOUT_SECS` | HTTP timeout for the full LLM response |
+| `PRAXIS_LLM_MAX_OUTPUT_TOKENS` | Cap completion length to reduce latency |
+| `PRAXIS_DIR` | Override storage directory (default: `~/.praxis`) |
 
-| Variable             | Description                        |
-|----------------------|------------------------------------|
-| `PRAXIS_LLM_API_BASE`| API base URL                       |
-| `PRAXIS_LLM_MODEL`   | Model name                         |
-| `PRAXIS_LLM_API_KEY` | Bearer token (optional)            |
-| `PRAXIS_DIR`         | Override storage directory         |
+## Local model notes
 
-### Using a remote provider (e.g. OpenAI)
+`praxis` currently uses a non-streaming OpenAI-compatible HTTP request. That means Ollama computes the full response and `praxis` prints it after completion.
+
+By contrast, `ollama run ...` streams tokens directly in the terminal, so it feels more interactive even when total generation time is similar.
+
+If local runs feel too slow:
 
 ```bash
-export PRAXIS_LLM_API_BASE="https://api.openai.com/v1"
-export PRAXIS_LLM_MODEL="gpt-4o"
-export PRAXIS_LLM_API_KEY="sk-..."
-praxis think "..."
+export PRAXIS_LLM_TIMEOUT_SECS=900
+export PRAXIS_LLM_MAX_OUTPUT_TOKENS=400
+```
+
+To compare raw model behavior outside `praxis`:
+
+```bash
+ollama run qwen3.5:9B "What database should I use for this project?"
 ```
 
 ## Artifacts
 
-Each run saves two files to `~/.praxis/runs/`:
+Each run produces two files in `~/.praxis/runs/`:
 
-- **`<timestamp>-<id>-think.md`** — Markdown with YAML frontmatter, the problem, and the full LLM response
-- **`<timestamp>-<id>-think.meta.json`** — JSON metadata: model, token counts, duration, praxis version
+| File | Contents |
+|---|---|
+| `<timestamp>-<id>-think.md` | Markdown with YAML frontmatter, the problem, and the full structured response |
+| `<timestamp>-<id>-think.meta.json` | JSON metadata: model, token counts, duration, praxis version |
 
-Token counts are exact when the API provides them; otherwise estimated at ~4 chars/token (marked `tokens~:` in the footer).
+Token counts are exact when the API provides usage data; otherwise estimated at ~4 chars/token (marked `tokens~:` in the footer).
+
+Files are plain text — searchable with `grep`, parseable with `jq`, composable with anything.
 
 ## Commands
 
-| Command              | Description                            |
-|----------------------|----------------------------------------|
+| Command | Description |
+|---|---|
 | `praxis think <problem>` | Run the structured thinking workflow |
-| `praxis --version`   | Print version                          |
-| `praxis --help`      | Print help                             |
+| `praxis --version` | Print version |
+| `praxis --help` | Print help |
+
+## Architecture
+
+```
+src/
+├── main.rs              # Entry point
+├── cli/mod.rs           # Argument parsing (clap)
+├── config/mod.rs        # Config resolution: defaults → file → env
+├── llm/mod.rs           # OpenAI-compatible API client
+├── observability/mod.rs # Metadata generation, token estimation
+├── storage/mod.rs       # Artifact and metadata persistence
+└── workflows/mod.rs     # Workflow orchestration and output formatting
+```
 
 ## Testing
 
@@ -104,22 +172,23 @@ Token counts are exact when the API provides them; otherwise estimated at ~4 cha
 cargo test
 ```
 
-### Testing strategy
+Unit tests cover all pure functions — token estimation, metadata construction, YAML serialisation, storage, and output formatting. See the test modules in each `mod.rs` for specifics.
 
-Tests are co-located with their module in `#[cfg(test)]` blocks.
+Integration tests against a live LLM endpoint are planned but not yet implemented.
 
-**Unit tests** cover all pure functions:
+## Roadmap
 
-| Module          | What's tested                                                   |
-|-----------------|-----------------------------------------------------------------|
-| `observability` | `estimate_tokens` (empty, rounding, typical), `build_metadata` (real tokens, estimated, mixed, char lengths) |
-| `storage`       | `yaml_quote` (plain, colon, escaping), `run_prefix` format, `build_frontmatter` field presence and quoting, `save_run` file creation and content |
-| `workflows`     | `is_numbered_item` (single-digit, multi-digit, rejects edge cases) |
+Praxis is in **Phase 1** — one workflow, one artifact format, observability from day one. The evolution path (detailed in [VISION.md](VISION.md)):
 
-**Integration tests** (not yet implemented — contributions welcome):
-- Mock HTTP server to test `llm::generate_response` against a fake OpenAI-compatible endpoint
-- End-to-end `praxis think` invocation against a live Ollama instance (gated, not in CI by default)
+| Phase | What | Status |
+|---|---|---|
+| 1. Foundation | `think` workflow, artifacts, metadata | **Current** |
+| 2. Workflows | `decide`, `plan`, `review`, `summarise` | Planned |
+| 3. Observability | `praxis stats`, cost tracking, model comparison | Planned |
+| 4. Context | Local RAG over artifacts, cross-run memory | Planned |
+| 5. Composition | Workflow chaining, tool plugins | Future |
+| 6. Integrations | External system connectors | Future |
 
-## License
+## Licence
 
 MIT
