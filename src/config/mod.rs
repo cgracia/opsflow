@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PraxisConfig {
-    pub llm_provider: String,
     pub llm_api_base: String,
     pub llm_model: String,
     pub llm_api_key: Option<String>,
@@ -14,7 +13,6 @@ pub struct PraxisConfig {
 impl Default for PraxisConfig {
     fn default() -> Self {
         PraxisConfig {
-            llm_provider: "openai-compatible".to_string(),
             llm_api_base: "http://localhost:11434/v1".to_string(),
             llm_model: "llama3".to_string(),
             llm_api_key: None,
@@ -31,7 +29,6 @@ fn default_praxis_dir() -> PathBuf {
 
 #[derive(Debug, Deserialize)]
 struct ConfigFile {
-    llm_provider: Option<String>,
     llm_api_base: Option<String>,
     llm_model: Option<String>,
     llm_api_key: Option<String>,
@@ -52,9 +49,6 @@ pub fn load_config() -> PraxisConfig {
             Ok(contents) => {
                 match toml::from_str::<ConfigFile>(&contents) {
                     Ok(file_config) => {
-                        if let Some(v) = file_config.llm_provider {
-                            config.llm_provider = v;
-                        }
                         if let Some(v) = file_config.llm_api_base {
                             config.llm_api_base = v;
                         }
@@ -77,9 +71,6 @@ pub fn load_config() -> PraxisConfig {
     }
 
     // Env var overrides (highest priority)
-    if let Ok(v) = std::env::var("PRAXIS_LLM_PROVIDER") {
-        config.llm_provider = v;
-    }
     if let Ok(v) = std::env::var("PRAXIS_LLM_API_BASE") {
         config.llm_api_base = v;
     }
