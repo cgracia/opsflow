@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,5 +58,80 @@ pub fn build_metadata(
         tokens_output_estimated,
         duration_ms,
         praxis_version: env!("CARGO_PKG_VERSION").to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn estimate_tokens_empty() {
+        assert_eq!(estimate_tokens(""), 0);
+    }
+
+    #[test]
+    fn estimate_tokens_rounds_up() {
+        // 1 char → ceil(1/4) = 1
+        assert_eq!(estimate_tokens("a"), 1);
+        // 4 chars → 1
+        assert_eq!(estimate_tokens("abcd"), 1);
+        // 5 chars → 2
+        assert_eq!(estimate_tokens("abcde"), 2);
+    }
+
+    #[test]
+    fn estimate_tokens_typical_sentence() {
+        let text = "How should I structure my Rust project?"; // 39 chars → ceil(39/4) = 10
+        assert_eq!(estimate_tokens(text), 10);
+    }
+
+    #[test]
+    fn build_metadata_uses_provided_tokens() {
+        let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let meta = build_metadata(
+            "run-id-1",
+            ts,
+            "think",
+            "my problem",
+            "my output",
+            "llama3",
+            Some(50),
+            Some(100),
+            42,
+        );
+        assert_eq!(meta.tokens_input, 50);
+        assert_eq!(meta.tokens_output, 100);
+        assert!(!meta.tokens_input_estimated);
+        assert!(!meta.tokens_output_estimated);
+    }
+
+    #[test]
+    fn build_metadata_estimates_tokens_when_none() {
+        let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let input = "abcd"; // 4 chars → 1 token
+        let output = "abcde"; // 5 chars → 2 tokens
+        let meta = build_metadata("id", ts, "think", input, output, "llama3", None, None, 10);
+        assert_eq!(meta.tokens_input, 1);
+        assert_eq!(meta.tokens_output, 2);
+        assert!(meta.tokens_input_estimated);
+        assert!(meta.tokens_output_estimated);
+    }
+
+    #[test]
+    fn build_metadata_mixed_tokens() {
+        let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let meta = build_metadata("id", ts, "think", "input", "output", "model", Some(5), None, 0);
+        assert_eq!(meta.tokens_input, 5);
+        assert!(!meta.tokens_input_estimated);
+        assert!(meta.tokens_output_estimated);
+    }
+
+    #[test]
+    fn build_metadata_records_lengths() {
+        let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let meta = build_metadata("id", ts, "think", "hello", "world!", "m", None, None, 0);
+        assert_eq!(meta.input_length_chars, 5);
+        assert_eq!(meta.output_length_chars, 6);
     }
 }
