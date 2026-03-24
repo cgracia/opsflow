@@ -41,12 +41,27 @@ Not for people who want a chatbot, a no-code builder, or a general-purpose assis
 3. **Observability from day one.** Every run generates metadata: cost, duration, token usage, model. You can't optimise what you can't measure.
 4. **Local-first, inspectable.** All data stored as files you own. Markdown and JSON. No cloud dependency, no lock-in, no hidden state.
 5. **Human-in-the-loop.** No hidden automation, no autonomous agents. The user initiates every run, reviews every output, decides what to do with it.
+6. **Context is explicit.** Local files, repo context, and past artifacts are declared inputs. Praxis should never silently absorb ambient state and pretend it is obvious.
 
 ## Design philosophy
 
 Praxis should feel like `git`, `curl`, `jq` — a sharp tool that does one thing well, composes with everything, and never surprises you.
 
 Explicit, not magical. Structured, not verbose. Inspectable, not opaque.
+
+## Context and guardrails
+
+Context access is powerful and dangerous. The default must therefore be conservative.
+
+Principles:
+
+- **No silent repo reading.** The user must opt in to local context access.
+- **Default-deny sensitive material.** Env files, credentials, keys, secret folders, and similar inputs should be excluded unless explicitly forced.
+- **Provenance in artifacts.** If context was used, the saved artifact should record what was read.
+- **Policy over prompts.** Enduring security rules should live in product behavior and configuration, not just in model instructions.
+- **Reasoning, not exfiltration.** Praxis should help interpret local context, not become a stealth data export mechanism.
+
+Long-term, this likely becomes a persistent local policy layer: safe roots, denied paths, approved context modes, and auditable context provenance for every run.
 
 ## Evolution path
 
@@ -72,7 +87,7 @@ Structured index over run metadata (DuckDB or SQLite). CLI queries: `praxis stat
 
 ### Phase 4 — Context and memory
 
-Local RAG over accumulated artifacts. Feed previous thinking into new runs. Graph context linking related decisions. The system starts to know what you've already reasoned about.
+Local RAG over accumulated artifacts. Feed previous thinking into new runs. Graph context linking related decisions. Explicit project context, policy-controlled file access, and artifact provenance become first-class concepts.
 
 *Validation: does Praxis surface relevant past thinking when working on a related problem?*
 

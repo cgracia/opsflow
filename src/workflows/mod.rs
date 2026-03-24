@@ -1,3 +1,4 @@
+use std::io::{self, IsTerminal, Write};
 use std::time::Instant;
 
 use chrono::Utc;
@@ -5,6 +6,7 @@ use colored::Colorize;
 use uuid::Uuid;
 
 use crate::config::PraxisConfig;
+use crate::context;
 use crate::llm;
 use crate::observability;
 use crate::storage;
@@ -33,24 +35,63 @@ Rules:
 - Be concise and decision-oriented.
 - Do not add sections beyond those listed above.
 - Use plain, direct language.
-- If you cannot determine something, state the assumption explicitly."#;
+- If you cannot determine something, state the assumption explicitly.
+- If explicit project context is provided, use it. If key facts are missing from that context, say so instead of inventing them."#;
 
-pub fn run_think(problem: &str, config: &PraxisConfig) -> Result<(), String> {
+pub struct ThinkOptions {
+    pub stream: Option<bool>,
+    pub repo_context: bool,
+}
+
+pub fn run_think(problem: &str, config: &PraxisConfig, options: ThinkOptions) -> Result<(), String> {
     let run_id = Uuid::new_v4().to_string();
     let short_id = &run_id[..8];
     let timestamp = Utc::now();
+    let use_stream = options.stream.unwrap_or_else(|| io::stdout().is_terminal());
+    let context_bundle = if options.repo_context {
+        Some(context::load_repo_context(&std::env::current_dir().map_err(|e| {
+            format!("error: Failed to resolve current working directory for --repo: {}", e)
+        })?)?)
+    } else {
+        None
+    };
+    let user_prompt = build_user_prompt(problem, context_bundle.as_ref());
 
     println!("{}", "Thinking...".dimmed());
     println!();
 
     let start = Instant::now();
 
-    let llm_response = llm::generate_response(THINK_SYSTEM_PROMPT, problem, config)?;
+    if use_stream {
+        print_output_header(problem, context_bundle.as_ref());
+    }
+
+    let llm_response = llm::generate_response(
+        THINK_SYSTEM_PROMPT,
+        &user_prompt,
+        config,
+        llm::LlmRequestOptions { stream: use_stream },
+        |chunk| {
+            if use_stream {
+                print!("{}", chunk);
+                io::stdout()
+                    .flush()
+                    .map_err(|e| format!("error: Failed to flush streaming output: {}", e))?;
+            }
+            Ok(())
+        },
+    )?;
 
     let duration_ms = start.elapsed().as_millis();
 
     // Print structured output to terminal
-    print_output(problem, &llm_response.text);
+    if use_stream {
+        if !llm_response.text.ends_with('\n') {
+            println!();
+        }
+    } else {
+        print_output(problem, context_bundle.as_ref(), &llm_response.text);
+    }
 
     // Build metadata
     let metadata = observability::build_metadata(
@@ -72,6 +113,9 @@ pub fn run_think(problem: &str, config: &PraxisConfig) -> Result<(), String> {
         short_id,
         "think",
         problem,
+        context_bundle.as_ref().map(|bundle| storage::ArtifactContext {
+            summary_markdown: &bundle.artifact_markdown,
+        }),
         &llm_response.text,
         &metadata,
     )?;
@@ -127,15 +171,35 @@ pub fn run_think(problem: &str, config: &PraxisConfig) -> Result<(), String> {
     Ok(())
 }
 
+fn build_user_prompt(problem: &str, context: Option<&context::ContextBundle>) -> String {
+    match context {
+        Some(context) => format!(
+            "Problem:\n{}\n\nProject Context:\n{}\nAnswer using the project context where relevant and call out assumptions when the context is incomplete.",
+            problem, context.prompt_text
+        ),
+        None => problem.to_string(),
+    }
+}
+
+fn print_output_header(problem: &str, context: Option<&context::ContextBundle>) {
+    println!("{}", problem.bold().white());
+    println!();
+
+    if let Some(context) = context {
+        println!("{}", "Context Used".cyan().bold());
+        println!("{}", context.artifact_markdown);
+        println!();
+    }
+}
+
 /// Returns true for lines like "1. foo", "10. bar", "99. baz".
 fn is_numbered_item(line: &str) -> bool {
     let rest = line.trim_start_matches(|c: char| c.is_ascii_digit());
     rest != line && rest.starts_with(". ")
 }
 
-pub fn print_output(problem: &str, output: &str) {
-    println!("{}", problem.bold().white());
-    println!();
+pub fn print_output(problem: &str, context: Option<&context::ContextBundle>, output: &str) {
+    print_output_header(problem, context);
 
     for line in output.lines() {
         if line.starts_with("## ") {
@@ -191,5 +255,18 @@ mod tests {
     fn numbered_item_rejects_bare_number() {
         assert!(!is_numbered_item("1"));
         assert!(!is_numbered_item("10"));
+    }
+
+    #[test]
+    fn build_user_prompt_includes_context_when_present() {
+        let prompt = build_user_prompt(
+            "What database should I use?",
+            Some(&context::ContextBundle {
+                prompt_text: "Explicit local project context from /tmp/test.".to_string(),
+                artifact_markdown: "- `Cargo.toml`".to_string(),
+            }),
+        );
+        assert!(prompt.contains("Project Context"));
+        assert!(prompt.contains("Explicit local project context"));
     }
 }
