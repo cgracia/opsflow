@@ -54,9 +54,8 @@ pub fn collect_signals(
 
             // Get the last scan time for this directory
             let last_scanned: Option<DateTime<Utc>> = {
-                let mut stmt = conn.prepare(
-                    "SELECT last_scanned FROM collection_state WHERE directory = ?",
-                )?;
+                let mut stmt =
+                    conn.prepare("SELECT last_scanned FROM collection_state WHERE directory = ?")?;
                 let mut rows = stmt.query(params![dir.to_string_lossy().as_ref()])?;
                 if let Some(row) = rows.next()? {
                     let ts: String = row.get(0)?;
@@ -129,8 +128,16 @@ pub fn collect_signals(
                         "INSERT INTO workflow_runs (workflow_name, last_output_at, output_path)
                          VALUES (?, ?, ?)
                          ON CONFLICT (workflow_name) DO UPDATE SET
-                             last_output_at = excluded.last_output_at,
-                             output_path    = excluded.output_path",
+                             last_output_at = CASE
+                                 WHEN excluded.last_output_at > workflow_runs.last_output_at
+                                 THEN excluded.last_output_at
+                                 ELSE workflow_runs.last_output_at
+                             END,
+                             output_path = CASE
+                                 WHEN excluded.last_output_at > workflow_runs.last_output_at
+                                 THEN excluded.output_path
+                                 ELSE workflow_runs.output_path
+                             END",
                         params![entry.name, file_modified_str, file_path],
                     )?;
 
@@ -279,12 +286,19 @@ mod tests {
 
         let signals = get_signals(
             &conn,
-            &SignalsFilter { untriaged_only: false, workflow: None },
+            &SignalsFilter {
+                untriaged_only: false,
+                workflow: None,
+            },
         )
         .unwrap();
         assert_eq!(signals.len(), 1);
         assert_eq!(signals[0].workflow_name, "test-wf");
-        assert!(signals[0].content_preview.as_deref().unwrap().contains("Daily Report"));
+        assert!(signals[0]
+            .content_preview
+            .as_deref()
+            .unwrap()
+            .contains("Daily Report"));
     }
 
     #[test]
@@ -302,6 +316,60 @@ mod tests {
     }
 
     #[test]
+    fn test_workflow_runs_upsert_preserves_newest_output_timestamp() {
+        let (_db_dir, conn) = temp_conn();
+
+        conn.execute(
+            "INSERT INTO workflow_runs (workflow_name, last_output_at, output_path)
+             VALUES (?, ?, ?)
+             ON CONFLICT (workflow_name) DO UPDATE SET
+                 last_output_at = CASE
+                     WHEN excluded.last_output_at > workflow_runs.last_output_at
+                     THEN excluded.last_output_at
+                     ELSE workflow_runs.last_output_at
+                 END,
+                 output_path = CASE
+                     WHEN excluded.last_output_at > workflow_runs.last_output_at
+                     THEN excluded.output_path
+                     ELSE workflow_runs.output_path
+                 END",
+            params!["wf", "2026-01-02T00:00:00+00:00", "/tmp/newer.md"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO workflow_runs (workflow_name, last_output_at, output_path)
+             VALUES (?, ?, ?)
+             ON CONFLICT (workflow_name) DO UPDATE SET
+                 last_output_at = CASE
+                     WHEN excluded.last_output_at > workflow_runs.last_output_at
+                     THEN excluded.last_output_at
+                     ELSE workflow_runs.last_output_at
+                 END,
+                 output_path = CASE
+                     WHEN excluded.last_output_at > workflow_runs.last_output_at
+                     THEN excluded.output_path
+                     ELSE workflow_runs.output_path
+                 END",
+            params!["wf", "2026-01-01T00:00:00+00:00", "/tmp/older.md"],
+        )
+        .unwrap();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT last_output_at, output_path FROM workflow_runs WHERE workflow_name = ?",
+            )
+            .unwrap();
+        let mut rows = stmt.query(params!["wf"]).unwrap();
+        let row = rows.next().unwrap().unwrap();
+        let last_output_at: String = row.get(0).unwrap();
+        let output_path: String = row.get(1).unwrap();
+
+        assert_eq!(last_output_at, "2026-01-02T00:00:00+00:00");
+        assert_eq!(output_path, "/tmp/newer.md");
+    }
+
+    #[test]
     fn test_get_signals_untriaged_filter() {
         let (_db_dir, conn) = temp_conn();
         let output_dir = TempDir::new().unwrap();
@@ -313,7 +381,10 @@ mod tests {
         // All signals start untriaged
         let untriaged = get_signals(
             &conn,
-            &SignalsFilter { untriaged_only: true, workflow: None },
+            &SignalsFilter {
+                untriaged_only: true,
+                workflow: None,
+            },
         )
         .unwrap();
         assert_eq!(untriaged.len(), 1);
@@ -327,7 +398,10 @@ mod tests {
 
         let untriaged_after = get_signals(
             &conn,
-            &SignalsFilter { untriaged_only: true, workflow: None },
+            &SignalsFilter {
+                untriaged_only: true,
+                workflow: None,
+            },
         )
         .unwrap();
         assert_eq!(untriaged_after.len(), 0);
