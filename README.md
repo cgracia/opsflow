@@ -152,7 +152,7 @@ To explicitly ground a run in the current repository:
 praxis think --repo "What database should I use for this project?"
 ```
 
-When `--repo` is enabled, Praxis reads a small, filtered set of project files from the current working directory, excludes common secret-bearing paths and files, injects that material into the prompt, and records the included file list in the saved artifact.
+When `--repo` is enabled, Praxis reads a small, filtered, budgeted set of project files from the current working directory, ranks them against your question, excludes common secret-bearing paths and files, injects only selected snippets into the prompt, and records the included file list in the saved artifact.
 
 This is intentionally explicit. Local context is a declared input, not hidden state.
 

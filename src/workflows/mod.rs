@@ -41,6 +41,7 @@ Rules:
 pub struct ThinkOptions {
     pub stream: Option<bool>,
     pub repo_context: bool,
+    pub show_reasoning: bool,
 }
 
 pub fn run_think(problem: &str, config: &PraxisConfig, options: ThinkOptions) -> Result<(), String> {
@@ -48,10 +49,15 @@ pub fn run_think(problem: &str, config: &PraxisConfig, options: ThinkOptions) ->
     let short_id = &run_id[..8];
     let timestamp = Utc::now();
     let use_stream = options.stream.unwrap_or_else(|| io::stdout().is_terminal());
+    let mut reasoning_started = false;
+    let mut content_started = false;
     let context_bundle = if options.repo_context {
-        Some(context::load_repo_context(&std::env::current_dir().map_err(|e| {
-            format!("error: Failed to resolve current working directory for --repo: {}", e)
-        })?)?)
+        Some(context::load_repo_context(
+            &std::env::current_dir().map_err(|e| {
+                format!("error: Failed to resolve current working directory for --repo: {}", e)
+            })?,
+            problem,
+        )?)
     } else {
         None
     };
@@ -71,21 +77,57 @@ pub fn run_think(problem: &str, config: &PraxisConfig, options: ThinkOptions) ->
         &user_prompt,
         config,
         llm::LlmRequestOptions { stream: use_stream },
-        |chunk| {
+        |event| {
             if use_stream {
-                print!("{}", chunk);
-                io::stdout()
-                    .flush()
-                    .map_err(|e| format!("error: Failed to flush streaming output: {}", e))?;
+                match event {
+                    llm::StreamEvent::Content(chunk) => {
+                        if options.show_reasoning && reasoning_started && !content_started {
+                            println!();
+                            println!("{}", "[Answer]".cyan().bold());
+                        }
+                        content_started = true;
+                        print!("{}", chunk);
+                        io::stdout()
+                            .flush()
+                            .map_err(|e| format!("error: Failed to flush streaming output: {}", e))?;
+                    }
+                    llm::StreamEvent::Reasoning(chunk) => {
+                        reasoning_started = true;
+                        if options.show_reasoning {
+                            if !content_started {
+                                print!("{}", chunk.dimmed());
+                            }
+                        } else if !content_started {
+                            print!("\r{}", "Thinking... reasoning stream active".dimmed());
+                        }
+                        io::stdout()
+                            .flush()
+                            .map_err(|e| format!("error: Failed to flush streaming output: {}", e))?;
+                    }
+                }
             }
             Ok(())
         },
     )?;
 
+    if llm_response.text.trim().is_empty() {
+        if let Some(reasoning) = &llm_response.reasoning {
+            let reasoning_chars = reasoning.chars().count();
+            return Err(format!(
+                "error: model produced reasoning but no final answer\nHint: this usually means the output token budget was consumed before answer generation.\nHint: increase PRAXIS_LLM_MAX_OUTPUT_TOKENS above {} or switch to a non-thinking model/profile if available.",
+                reasoning_chars.max(400)
+            ));
+        }
+        return Err("error: model returned an empty response".to_string());
+    }
+
     let duration_ms = start.elapsed().as_millis();
 
     // Print structured output to terminal
     if use_stream {
+        if reasoning_started && !options.show_reasoning {
+            print!("\r{}\r", " ".repeat(40));
+        }
         if !llm_response.text.ends_with('\n') {
             println!();
         }

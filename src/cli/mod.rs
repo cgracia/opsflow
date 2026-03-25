@@ -27,5 +27,9 @@ pub enum Commands {
         /// Read local repository context from the current working directory
         #[arg(long, action = ArgAction::SetTrue)]
         repo: bool,
+
+        /// Show streamed reasoning separately from final answer content
+        #[arg(long, action = ArgAction::SetTrue)]
+        show_reasoning: bool,
     },
 }

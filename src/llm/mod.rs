@@ -1,15 +1,22 @@
 use std::io::{BufRead, BufReader, Write};
 
 use reqwest::blocking::Client;
+use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 
 use crate::config::PraxisConfig;
 
 pub struct LlmResponse {
     pub text: String,
+    pub reasoning: Option<String>,
     pub model: String,
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
+}
+
+pub enum StreamEvent<'a> {
+    Content(&'a str),
+    Reasoning(&'a str),
 }
 
 #[derive(Serialize)]
@@ -50,6 +57,8 @@ struct Choice {
 #[derive(Deserialize)]
 struct AssistantMessage {
     content: String,
+    #[serde(default)]
+    reasoning: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -61,12 +70,14 @@ struct StreamChatResponse {
 
 #[derive(Deserialize)]
 struct StreamChoice {
-    delta: StreamDelta,
+    delta: Option<StreamDelta>,
+    message: Option<AssistantMessage>,
 }
 
 #[derive(Deserialize)]
 struct StreamDelta {
     content: Option<String>,
+    reasoning: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -85,7 +96,7 @@ pub fn generate_response(
     user_prompt: &str,
     config: &PraxisConfig,
     options: LlmRequestOptions,
-    mut on_chunk: impl FnMut(&str) -> Result<(), String>,
+    mut on_chunk: impl FnMut(StreamEvent<'_>) -> Result<(), String>,
 ) -> Result<LlmResponse, String> {
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(config.llm_timeout_secs))
@@ -154,10 +165,13 @@ pub fn generate_response(
 
     let text = chat_response
         .choices
-        .into_iter()
-        .next()
-        .map(|c| c.message.content)
+        .first()
+        .map(|c| c.message.content.clone())
         .ok_or_else(|| "error: LLM returned no choices".to_string())?;
+    let reasoning = chat_response
+        .choices
+        .first()
+        .and_then(|c| c.message.reasoning.clone());
 
     let (input_tokens, output_tokens) = if let Some(usage) = chat_response.usage {
         (usage.prompt_tokens, usage.completion_tokens)
@@ -169,6 +183,7 @@ pub fn generate_response(
 
     Ok(LlmResponse {
         text,
+        reasoning,
         model,
         input_tokens,
         output_tokens,
@@ -178,11 +193,23 @@ pub fn generate_response(
 fn read_streaming_response(
     response: reqwest::blocking::Response,
     config: &PraxisConfig,
-    on_chunk: &mut impl FnMut(&str) -> Result<(), String>,
+    on_chunk: &mut impl FnMut(StreamEvent<'_>) -> Result<(), String>,
 ) -> Result<LlmResponse, String> {
+    let is_event_stream = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.contains("text/event-stream"))
+        .unwrap_or(false);
+
+    if !is_event_stream {
+        return read_non_streaming_fallback(response, config, on_chunk);
+    }
+
     let mut reader = BufReader::new(response);
     let mut line = String::new();
     let mut text = String::new();
+    let mut reasoning_text = String::new();
     let mut model = config.llm_model.clone();
     let mut input_tokens = None;
     let mut output_tokens = None;
@@ -220,8 +247,21 @@ fn read_streaming_response(
         }
 
         for choice in chunk.choices {
-            if let Some(content) = choice.delta.content {
-                on_chunk(&content)?;
+            let reasoning = choice
+                .delta
+                .as_ref()
+                .and_then(|delta| delta.reasoning.as_deref());
+            if let Some(reasoning) = reasoning {
+                on_chunk(StreamEvent::Reasoning(reasoning))?;
+                reasoning_text.push_str(reasoning);
+            }
+
+            let content = choice
+                .delta
+                .and_then(|delta| delta.content)
+                .or_else(|| choice.message.map(|message| message.content));
+            if let Some(content) = content {
+                on_chunk(StreamEvent::Content(&content))?;
                 text.push_str(&content);
             }
         }
@@ -233,8 +273,89 @@ fn read_streaming_response(
 
     Ok(LlmResponse {
         text,
+        reasoning: (!reasoning_text.is_empty()).then_some(reasoning_text),
         model,
         input_tokens,
         output_tokens,
     })
+}
+
+fn read_non_streaming_fallback(
+    response: reqwest::blocking::Response,
+    config: &PraxisConfig,
+    on_chunk: &mut impl FnMut(StreamEvent<'_>) -> Result<(), String>,
+) -> Result<LlmResponse, String> {
+    let chat_response: ChatResponse = response
+        .json()
+        .map_err(|e| format!("error: Failed to parse LLM response: {}", e))?;
+
+    let text = chat_response
+        .choices
+        .first()
+        .map(|c| c.message.content.clone())
+        .ok_or_else(|| "error: LLM returned no choices".to_string())?;
+    let reasoning = chat_response
+        .choices
+        .first()
+        .and_then(|c| c.message.reasoning.clone());
+
+    on_chunk(StreamEvent::Content(&text))?;
+
+    let (input_tokens, output_tokens) = if let Some(usage) = chat_response.usage {
+        (usage.prompt_tokens, usage.completion_tokens)
+    } else {
+        (None, None)
+    };
+
+    let model = chat_response.model.unwrap_or_else(|| config.llm_model.clone());
+
+    Ok(LlmResponse {
+        text,
+        reasoning,
+        model,
+        input_tokens,
+        output_tokens,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_delta_stream_chunks() {
+        let chunk: StreamChatResponse = serde_json::from_str(
+            r#"{"model":"qwen3.5:9B","choices":[{"delta":{"content":"hello","reasoning":"plan"}}]}"#,
+        )
+        .unwrap();
+        let content = chunk.choices[0].delta.as_ref().and_then(|delta| delta.content.as_deref());
+        assert_eq!(content, Some("hello"));
+        let reasoning = chunk.choices[0]
+            .delta
+            .as_ref()
+            .and_then(|delta| delta.reasoning.as_deref());
+        assert_eq!(reasoning, Some("plan"));
+    }
+
+    #[test]
+    fn parses_message_stream_chunks() {
+        let chunk: StreamChatResponse = serde_json::from_str(
+            r#"{"model":"qwen3.5:9B","choices":[{"message":{"content":"hello"}}]}"#,
+        )
+        .unwrap();
+        let content = chunk.choices[0].message.as_ref().map(|message| message.content.as_str());
+        assert_eq!(content, Some("hello"));
+    }
+
+    #[test]
+    fn parses_non_stream_reasoning_field() {
+        let response: ChatResponse = serde_json::from_str(
+            r#"{"model":"qwen3.5:9B","choices":[{"message":{"content":"","reasoning":"long chain"}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            response.choices[0].message.reasoning.as_deref(),
+            Some("long chain")
+        );
+    }
 }
