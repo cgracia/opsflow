@@ -1,0 +1,15 @@
+{
+  "run_id": "a3f9b12c",
+  "timestamp": "2026-03-25T12:00:00Z",
+  "command": "think",
+  "model": "qwen3.5:9B",
+  "input_text": "Should I rewrite the auth service in Rust?",
+  "input_length_chars": 41,
+  "output_length_chars": 1243,
+  "tokens_input": 312,
+  "tokens_output": 189,
+  "tokens_input_estimated": false,
+  "tokens_output_estimated": false,
+  "duration_ms": 4231,
+  "praxis_version": "0.1.0"
+}

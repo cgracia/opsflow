@@ -1,0 +1,18 @@
+{
+  "id": "msg-001",
+  "sessionID": "sess-abc",
+  "role": "assistant",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "content": [
+    {
+      "type": "text",
+      "text": "Here is the refactored auth service..."
+    }
+  ],
+  "input_tokens": 1500,
+  "output_tokens": 320,
+  "cache_creation_input_tokens": 200,
+  "cache_read_input_tokens": 800,
+  "cost": 0,
+  "time_created": 1742896900
+}
