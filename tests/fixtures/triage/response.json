@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "sig-abc123",
+      "kind": "signal",
+      "priority": "ACT_NOW",
+      "reason": "3 P1 tickets have been unresolved for more than 24 hours, breaching SLA for ACME Corp, Globex, and Initech.",
+      "suggested_action": "Contact account managers for ACME, Globex, and Initech and escalate to on-call engineer immediately."
+    },
+    {
+      "id": "task-001",
+      "kind": "task",
+      "priority": "REVIEW_TODAY",
+      "reason": "1:1 prep is due today and requires preparation before the meeting.",
+      "suggested_action": "Review recent ticket data and team metrics before the 1:1."
+    },
+    {
+      "id": "task-002",
+      "kind": "task",
+      "priority": "REVIEW_TODAY",
+      "reason": "Q1 OKR review is due today and is a high-priority strategic task.",
+      "suggested_action": "Block 30 minutes to review OKR progress and prepare summary."
+    }
+  ]
+}

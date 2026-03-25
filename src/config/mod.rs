@@ -12,6 +12,21 @@ pub struct PraxisConfig {
     pub praxis_dir: PathBuf,
     pub opencode_dir: Option<PathBuf>,
     pub claude_code_dir: Option<PathBuf>,
+
+    // Phase 3: Todoist integration
+    pub todoist_api_key: Option<String>,
+    /// Default Todoist project name for pushed tasks.
+    pub todoist_project: Option<String>,
+    /// Todoist filter expression for pulling tasks into the triage view.
+    pub todoist_pull_filter: Option<String>,
+
+    // Phase 3: Triage settings
+    /// Role context injected into the triage system prompt.
+    pub triage_role_context: Option<String>,
+    /// Maximum number of signals to include in a single triage call.
+    pub triage_max_signals: Option<usize>,
+    /// Max output tokens for triage LLM calls (overrides llm_max_output_tokens).
+    pub triage_max_output_tokens: Option<u32>,
 }
 
 impl Default for PraxisConfig {
@@ -25,6 +40,12 @@ impl Default for PraxisConfig {
             praxis_dir: default_praxis_dir(),
             opencode_dir: None,
             claude_code_dir: None,
+            todoist_api_key: None,
+            todoist_project: None,
+            todoist_pull_filter: None,
+            triage_role_context: None,
+            triage_max_signals: None,
+            triage_max_output_tokens: None,
         }
     }
 }
@@ -90,6 +111,13 @@ struct ConfigFile {
     llm_max_output_tokens: Option<u32>,
     opencode_dir: Option<String>,
     claude_code_dir: Option<String>,
+    // Phase 3
+    todoist_api_key: Option<String>,
+    todoist_project: Option<String>,
+    todoist_pull_filter: Option<String>,
+    triage_role_context: Option<String>,
+    triage_max_signals: Option<usize>,
+    triage_max_output_tokens: Option<u32>,
 }
 
 pub fn load_config() -> PraxisConfig {
@@ -127,6 +155,24 @@ pub fn load_config() -> PraxisConfig {
                         }
                         if let Some(v) = file_config.claude_code_dir {
                             config.claude_code_dir = Some(PathBuf::from(v));
+                        }
+                        if let Some(v) = file_config.todoist_api_key {
+                            config.todoist_api_key = Some(v);
+                        }
+                        if let Some(v) = file_config.todoist_project {
+                            config.todoist_project = Some(v);
+                        }
+                        if let Some(v) = file_config.todoist_pull_filter {
+                            config.todoist_pull_filter = Some(v);
+                        }
+                        if let Some(v) = file_config.triage_role_context {
+                            config.triage_role_context = Some(v);
+                        }
+                        if let Some(v) = file_config.triage_max_signals {
+                            config.triage_max_signals = Some(v);
+                        }
+                        if let Some(v) = file_config.triage_max_output_tokens {
+                            config.triage_max_output_tokens = Some(v);
                         }
                     }
                     Err(e) => {
@@ -167,6 +213,11 @@ pub fn load_config() -> PraxisConfig {
     }
     // Note: PRAXIS_OPENCODE_DIR and PRAXIS_CLAUDE_CODE_DIR are resolved lazily
     // via resolved_opencode_dir() / resolved_claude_code_dir() to keep load_config simple.
+
+    // Phase 3 env overrides
+    if let Ok(v) = std::env::var("PRAXIS_TODOIST_API_KEY") {
+        config.todoist_api_key = Some(v);
+    }
 
     config
 }
