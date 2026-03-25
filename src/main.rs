@@ -6,11 +6,14 @@ mod db;
 mod ingest;
 mod llm;
 mod observability;
+mod registry;
+mod signals;
 mod storage;
+mod todoist;
 mod workflows;
 
 use clap::Parser;
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, TasksSubcommand, WorkflowsSubcommand};
 
 fn main() {
     let cli = Cli::parse();
@@ -83,6 +86,61 @@ fn main() {
         Commands::Stats { by, since, until, json } => commands::stats::run(
             &config,
             commands::stats::StatsOptions { by, since, until, json },
+        ),
+
+        // ── Phase 3: Control Plane ────────────────────────────────────────────
+
+        Commands::Discover => commands::discover::run(&config),
+
+        Commands::Workflows { status, tag, stale, command } => {
+            let show_name = match command {
+                Some(WorkflowsSubcommand::Show { name }) => Some(name),
+                None => None,
+            };
+            commands::workflows::run(
+                &config,
+                commands::workflows::WorkflowsOptions {
+                    show_status: status,
+                    tag,
+                    stale_only: stale,
+                    show_name,
+                },
+            )
+        }
+
+        Commands::Collect => commands::collect::run(&config),
+
+        Commands::Signals { untriaged, workflow } => commands::signals::run(
+            &config,
+            commands::signals::SignalsOptions {
+                untriaged_only: untriaged,
+                workflow,
+            },
+        ),
+
+        Commands::Triage => commands::triage::run(&config),
+
+        Commands::Tasks { command } => {
+            let cmd = match command {
+                None => commands::tasks::TasksCommand::List,
+                Some(TasksSubcommand::Add { content, due, priority }) => {
+                    commands::tasks::TasksCommand::Add { content, due, priority }
+                }
+                Some(TasksSubcommand::Done { id }) => {
+                    commands::tasks::TasksCommand::Done { id }
+                }
+            };
+            commands::tasks::run(&config, cmd)
+        }
+
+        Commands::Sync => commands::sync::run(&config),
+
+        Commands::Status { urgent, json } => commands::status::run(
+            &config,
+            commands::status::StatusOptions {
+                urgent_only: urgent,
+                json,
+            },
         ),
     };
 

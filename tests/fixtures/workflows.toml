@@ -1,0 +1,49 @@
+[workflows.customer-tickets]
+description = "Summarise new customer tickets and flag P1s"
+trigger = "scheduled"
+schedule = "daily 07:00"
+source_command = "opencode"
+command_path = ".opencode/commands/customer-tickets.md"
+reads_from = ["jira-mirror", "mcp-rag"]
+writes_to = ["/tmp/praxis-test/reports/tickets/"]
+output_format = "markdown"
+tags = ["support", "triage", "daily"]
+expected_frequency_hours = 24
+enabled = true
+
+[workflows.performance-review]
+description = "Generate performance review draft for employee"
+trigger = "manual"
+source_command = "opencode"
+command_path = ".opencode/commands/performance-review.md"
+reads_from = ["jira-mirror", "confluence-mirror", "mcp-rag"]
+writes_to = ["/tmp/praxis-test/reviews/"]
+output_format = "markdown"
+tags = ["management", "reviews", "quarterly"]
+enabled = true
+
+[workflows.confluence-sync]
+description = "Mirror Confluence pages to local markdown"
+trigger = "scheduled"
+schedule = "daily 06:00"
+source_command = "systemd"
+command_path = "~/.config/systemd/user/confluence-sync.timer"
+reads_from = ["confluence-api"]
+writes_to = ["/tmp/praxis-test/confluence-mirror/"]
+output_format = "markdown"
+tags = ["sync", "data", "daily"]
+expected_frequency_hours = 24
+enabled = true
+
+[workflows.cost-alert]
+description = "Alert on unusual AI usage costs"
+trigger = "scheduled"
+schedule = "daily 08:00"
+source_command = "script"
+command_path = "~/.praxis/scripts/cost-alert.sh"
+reads_from = ["praxis-db"]
+writes_to = ["/tmp/praxis-test/alerts/"]
+output_format = "markdown"
+tags = ["cost", "daily"]
+expected_frequency_hours = 24
+enabled = false
