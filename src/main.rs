@@ -19,6 +19,7 @@ fn main() {
             stream,
             no_stream,
             repo,
+            show_reasoning,
         } => workflows::run_think(
             &problem,
             &config,
@@ -31,6 +32,7 @@ fn main() {
                     None
                 },
                 repo_context: repo,
+                show_reasoning,
             },
         ),
     };
