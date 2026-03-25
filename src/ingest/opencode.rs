@@ -8,6 +8,7 @@ use crate::ingest::pricing::PricingDb;
 use crate::ingest::{IngestResult, RunRecord, SessionRecord};
 use duckdb::Connection;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +69,7 @@ pub fn ingest(
     let mut sessions_added = 0;
     let mut runs_added = 0;
     let mut files_skipped = 0;
+    let mut session_projects: HashMap<String, Option<String>> = HashMap::new();
 
     // Ingest session files
     if session_dir.exists() {
@@ -92,6 +94,7 @@ pub fn ingest(
 
             match parse_session_file(&path) {
                 Ok(session) => {
+                    session_projects.insert(session.id.clone(), session.project.clone());
                     db::insert_session(conn, &session)?;
                     db::record_ingestion(conn, "opencode_session", &path_str, &mtime, 1)?;
                     sessions_added += 1;
@@ -125,7 +128,14 @@ pub fn ingest(
             }
 
             match parse_message_file(&path, pricing) {
-                Ok(run) => {
+                Ok(mut run) => {
+                    if let Some(session_id) = &run.session_id {
+                        run.project = session_projects
+                            .get(session_id)
+                            .cloned()
+                            .flatten()
+                            .or_else(|| lookup_session_project(conn, session_id));
+                    }
                     db::insert_run(conn, &run)?;
                     db::record_ingestion(conn, "opencode", &path_str, &mtime, 1)?;
                     runs_added += 1;
@@ -236,6 +246,14 @@ fn file_mtime_str(path: &Path) -> String {
         .unwrap_or_else(|_| "0".to_string())
 }
 
+fn lookup_session_project(conn: &Connection, session_id: &str) -> Option<String> {
+    let mut stmt = conn
+        .prepare("SELECT project FROM sessions WHERE id = ? LIMIT 1")
+        .ok()?;
+    let mut rows = stmt.query([session_id]).ok()?;
+    rows.next().ok().flatten().and_then(|row| row.get(0).ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +349,35 @@ mod tests {
         let result2 = ingest(&conn, &pricing, &opencode_dir).unwrap();
         assert_eq!(result2.runs_added, 0);
         assert_eq!(result2.files_skipped, 2); // session + message
+    }
+
+    #[test]
+    fn test_ingest_sets_run_project_from_session() {
+        let dir = TempDir::new().unwrap();
+        let opencode_dir = dir.path().join("opencode");
+        let storage = opencode_dir.join("storage");
+        let session_dir = storage.join("session").join("proj-hash");
+        let message_dir = storage.join("message").join("sess-abc");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        std::fs::create_dir_all(&message_dir).unwrap();
+
+        let session_json = r#"{"id":"sess-abc","title":"Test","projectID":"proj-hash","model":"anthropic/claude-sonnet-4","time":{"created":1742896800,"updated":1742900400}}"#;
+        std::fs::write(session_dir.join("sess-abc.json"), session_json).unwrap();
+
+        let msg_json = r#"{"id":"msg-001","sessionID":"sess-abc","role":"assistant","model":"anthropic/claude-sonnet-4","input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cost":0,"time_created":1742896900}"#;
+        std::fs::write(message_dir.join("msg_msg-001.json"), msg_json).unwrap();
+
+        let praxis_dir = dir.path().join("praxis");
+        let conn = init_db(&praxis_dir).unwrap();
+        let pricing = empty_pricing();
+
+        ingest(&conn, &pricing, &opencode_dir).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT project FROM runs WHERE id = 'oc-msg-001'")
+            .unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        let project: Option<String> = rows.next().unwrap().unwrap().get(0).unwrap();
+        assert_eq!(project.as_deref(), Some("proj-hash"));
     }
 }

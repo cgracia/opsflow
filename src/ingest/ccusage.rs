@@ -96,7 +96,11 @@ pub fn ingest(
                 let _ = std::fs::rename(&path, dest);
             }
             Err(e) => {
-                eprintln!("warning: failed to parse ccusage file {}: {}", path.display(), e);
+                eprintln!(
+                    "warning: failed to parse ccusage file {}: {}",
+                    path.display(),
+                    e
+                );
             }
         }
     }
@@ -116,7 +120,7 @@ fn parse_ccusage_file(
     let report: CcusageReport = serde_json::from_str(&raw)?;
 
     // Infer source from filename:
-    //   ccusage-claude-code.json → claude_code
+    //   ccusage-claude-code.json → claude-code
     //   ccusage-opencode.json    → opencode
     //   otherwise                → ccusage
     let filename = path
@@ -126,7 +130,7 @@ fn parse_ccusage_file(
     let source = if filename.contains("opencode") {
         "opencode"
     } else if filename.contains("claude") {
-        "claude_code"
+        "claude-code"
     } else {
         "ccusage"
     };
@@ -157,7 +161,7 @@ fn parse_ccusage_file(
         });
 
         // ccusage data for Claude Code inherits unreliable token counts
-        let is_claude_code = source == "claude_code";
+        let is_claude_code = source == "claude-code";
         let data_quality = if is_claude_code {
             "claude_code_jsonl_unreliable"
         } else {
@@ -242,7 +246,7 @@ mod tests {
         assert_eq!(runs.len(), 1);
 
         let run = &runs[0];
-        assert_eq!(run.source, "claude_code");
+        assert_eq!(run.source, "claude-code");
         assert_eq!(run.input_tokens, 4512);
         assert_eq!(run.output_tokens, 350846);
         assert_eq!(run.cost_usd, 156.40);
@@ -283,6 +287,8 @@ mod tests {
 
         // File should be moved to processed/
         assert!(!src.exists());
-        assert!(imports_dir.join("processed/ccusage-claude-code.json").exists());
+        assert!(imports_dir
+            .join("processed/ccusage-claude-code.json")
+            .exists());
     }
 }

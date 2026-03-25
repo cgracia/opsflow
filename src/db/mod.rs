@@ -13,7 +13,8 @@ pub fn init_db(praxis_dir: &Path) -> Result<Connection, Box<dyn std::error::Erro
 }
 
 fn apply_schema(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS sessions (
             id          VARCHAR PRIMARY KEY,
             source      VARCHAR NOT NULL,
@@ -59,7 +60,8 @@ fn apply_schema(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
             records_added   INTEGER DEFAULT 0,
             PRIMARY KEY (source, source_path)
         );
-    ")?;
+    ",
+    )?;
     Ok(())
 }
 
@@ -69,9 +71,8 @@ pub fn check_ingested(
     source: &str,
     source_path: &str,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    let mut stmt = conn.prepare(
-        "SELECT file_modified FROM ingestion_log WHERE source = ? AND source_path = ?",
-    )?;
+    let mut stmt = conn
+        .prepare("SELECT file_modified FROM ingestion_log WHERE source = ? AND source_path = ?")?;
     let mut rows = stmt.query(params![source, source_path])?;
     if let Some(row) = rows.next()? {
         let val: String = row.get(0)?;
@@ -129,11 +130,8 @@ pub fn insert_session(
     Ok(())
 }
 
-/// Insert a run record. Skips on conflict (idempotent).
-pub fn insert_run(
-    conn: &Connection,
-    r: &RunRecord,
-) -> Result<(), Box<dyn std::error::Error>> {
+/// Insert a run record. Upserts on conflict so re-ingestion can refresh mutable logs.
+pub fn insert_run(conn: &Connection, r: &RunRecord) -> Result<(), Box<dyn std::error::Error>> {
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO runs
@@ -142,7 +140,27 @@ pub fn insert_run(
               tokens_estimated, data_quality, cost_usd, cost_estimated,
               duration_ms, project, git_branch, working_dir, command, source_path, ingested_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO NOTHING",
+         ON CONFLICT (id) DO UPDATE SET
+             session_id         = excluded.session_id,
+             source             = excluded.source,
+             model              = excluded.model,
+             timestamp          = excluded.timestamp,
+             role               = excluded.role,
+             input_tokens       = excluded.input_tokens,
+             output_tokens      = excluded.output_tokens,
+             cache_read_tokens  = excluded.cache_read_tokens,
+             cache_write_tokens = excluded.cache_write_tokens,
+             tokens_estimated   = excluded.tokens_estimated,
+             data_quality       = excluded.data_quality,
+             cost_usd           = excluded.cost_usd,
+             cost_estimated     = excluded.cost_estimated,
+             duration_ms        = excluded.duration_ms,
+             project            = excluded.project,
+             git_branch         = excluded.git_branch,
+             working_dir        = excluded.working_dir,
+             command            = excluded.command,
+             source_path        = excluded.source_path,
+             ingested_at        = excluded.ingested_at",
         params![
             r.id,
             r.session_id,
@@ -196,18 +214,29 @@ mod tests {
     fn test_schema_creation() {
         let (_dir, conn) = temp_conn();
         // Should be able to query all three tables
-        conn.execute_batch("SELECT 1 FROM sessions LIMIT 0").unwrap();
+        conn.execute_batch("SELECT 1 FROM sessions LIMIT 0")
+            .unwrap();
         conn.execute_batch("SELECT 1 FROM runs LIMIT 0").unwrap();
-        conn.execute_batch("SELECT 1 FROM ingestion_log LIMIT 0").unwrap();
+        conn.execute_batch("SELECT 1 FROM ingestion_log LIMIT 0")
+            .unwrap();
     }
 
     #[test]
     fn test_ingestion_log_round_trip() {
         let (_dir, conn) = temp_conn();
 
-        assert!(check_ingested(&conn, "opencode", "/some/path.json").unwrap().is_none());
+        assert!(check_ingested(&conn, "opencode", "/some/path.json")
+            .unwrap()
+            .is_none());
 
-        record_ingestion(&conn, "opencode", "/some/path.json", "2026-03-25T10:00:00Z", 5).unwrap();
+        record_ingestion(
+            &conn,
+            "opencode",
+            "/some/path.json",
+            "2026-03-25T10:00:00Z",
+            5,
+        )
+        .unwrap();
 
         let result = check_ingested(&conn, "opencode", "/some/path.json").unwrap();
         assert!(result.is_some());
@@ -245,7 +274,9 @@ mod tests {
         // Duplicate should be silently skipped
         insert_session(&conn, &session).unwrap();
 
-        let mut stmt = conn.prepare("SELECT COUNT(*) FROM sessions WHERE id = 'sess-001'").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT COUNT(*) FROM sessions WHERE id = 'sess-001'")
+            .unwrap();
         let mut rows = stmt.query([]).unwrap();
         let count: i64 = rows.next().unwrap().unwrap().get(0).unwrap();
         assert_eq!(count, 1);
@@ -281,8 +312,21 @@ mod tests {
 
         assert_eq!(run_count(&conn).unwrap(), 1);
 
-        // Duplicate is silently skipped
-        insert_run(&conn, &run).unwrap();
+        // Duplicate is upserted
+        let mut updated_run = run.clone();
+        updated_run.output_tokens = 750;
+        updated_run.project = Some("myapp-v2".to_string());
+        insert_run(&conn, &updated_run).unwrap();
         assert_eq!(run_count(&conn).unwrap(), 1);
+
+        let mut stmt = conn
+            .prepare("SELECT output_tokens, project FROM runs WHERE id = 'run-001'")
+            .unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        let row = rows.next().unwrap().unwrap();
+        let output_tokens: i64 = row.get(0).unwrap();
+        let project: Option<String> = row.get(1).unwrap();
+        assert_eq!(output_tokens, 750);
+        assert_eq!(project.as_deref(), Some("myapp-v2"));
     }
 }
