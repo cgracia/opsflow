@@ -10,6 +10,8 @@ pub struct PraxisConfig {
     pub llm_timeout_secs: u64,
     pub llm_max_output_tokens: Option<u32>,
     pub praxis_dir: PathBuf,
+    pub opencode_dir: Option<PathBuf>,
+    pub claude_code_dir: Option<PathBuf>,
 }
 
 impl Default for PraxisConfig {
@@ -21,6 +23,54 @@ impl Default for PraxisConfig {
             llm_timeout_secs: 600,
             llm_max_output_tokens: Some(700),
             praxis_dir: default_praxis_dir(),
+            opencode_dir: None,
+            claude_code_dir: None,
+        }
+    }
+}
+
+impl PraxisConfig {
+    /// Resolved OpenCode data directory: config → env → default.
+    /// Returns None if neither configured nor the default path exists.
+    pub fn resolved_opencode_dir(&self) -> Option<PathBuf> {
+        // Env var overrides config
+        if let Ok(v) = std::env::var("PRAXIS_OPENCODE_DIR") {
+            return Some(PathBuf::from(v));
+        }
+        if let Some(ref d) = self.opencode_dir {
+            return Some(d.clone());
+        }
+        // Default: ~/.local/share/opencode
+        let default = dirs_next::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".local")
+            .join("share")
+            .join("opencode");
+        if default.exists() {
+            Some(default)
+        } else {
+            None
+        }
+    }
+
+    /// Resolved Claude Code projects directory: config → env → default.
+    /// Returns None if neither configured nor the default path exists.
+    pub fn resolved_claude_code_dir(&self) -> Option<PathBuf> {
+        if let Ok(v) = std::env::var("PRAXIS_CLAUDE_CODE_DIR") {
+            return Some(PathBuf::from(v));
+        }
+        if let Some(ref d) = self.claude_code_dir {
+            return Some(d.clone());
+        }
+        // Default: ~/.claude/projects
+        let default = dirs_next::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".claude")
+            .join("projects");
+        if default.exists() {
+            Some(default)
+        } else {
+            None
         }
     }
 }
@@ -38,6 +88,8 @@ struct ConfigFile {
     llm_api_key: Option<String>,
     llm_timeout_secs: Option<u64>,
     llm_max_output_tokens: Option<u32>,
+    opencode_dir: Option<String>,
+    claude_code_dir: Option<String>,
 }
 
 pub fn load_config() -> PraxisConfig {
@@ -69,6 +121,12 @@ pub fn load_config() -> PraxisConfig {
                         }
                         if let Some(v) = file_config.llm_max_output_tokens {
                             config.llm_max_output_tokens = Some(v);
+                        }
+                        if let Some(v) = file_config.opencode_dir {
+                            config.opencode_dir = Some(PathBuf::from(v));
+                        }
+                        if let Some(v) = file_config.claude_code_dir {
+                            config.claude_code_dir = Some(PathBuf::from(v));
                         }
                     }
                     Err(e) => {
@@ -107,6 +165,8 @@ pub fn load_config() -> PraxisConfig {
             ),
         }
     }
+    // Note: PRAXIS_OPENCODE_DIR and PRAXIS_CLAUDE_CODE_DIR are resolved lazily
+    // via resolved_opencode_dir() / resolved_claude_code_dir() to keep load_config simple.
 
     config
 }
