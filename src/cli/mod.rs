@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "praxis")]
-#[command(about = "AI workflow observability — instrument, ingest, and query your AI usage")]
+#[command(about = "AI workflow observability and control plane — instrument, ingest, triage, and act")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -93,5 +93,97 @@ pub enum Commands {
         /// Output as JSON
         #[arg(long, action = ArgAction::SetTrue)]
         json: bool,
+    },
+
+    // ─── Phase 3: Control Plane ───────────────────────────────────────────────
+
+    /// Auto-discover workflows from OpenCode commands and systemd timers
+    Discover,
+
+    /// List and inspect registered workflows
+    Workflows {
+        /// Show status (last run, health) for each workflow
+        #[arg(long, action = ArgAction::SetTrue)]
+        status: bool,
+
+        /// Filter by tag
+        #[arg(long)]
+        tag: Option<String>,
+
+        /// Show only stale workflows (past their expected frequency)
+        #[arg(long, action = ArgAction::SetTrue)]
+        stale: bool,
+
+        #[command(subcommand)]
+        command: Option<WorkflowsSubcommand>,
+    },
+
+    /// Collect new signals from workflow output directories
+    Collect,
+
+    /// Show collected signals
+    Signals {
+        /// Show only untriaged signals
+        #[arg(long, action = ArgAction::SetTrue)]
+        untriaged: bool,
+
+        /// Filter by workflow name
+        #[arg(long)]
+        workflow: Option<String>,
+    },
+
+    /// Run LLM triage on untriaged signals
+    Triage,
+
+    /// Show and manage Todoist tasks
+    Tasks {
+        #[command(subcommand)]
+        command: Option<TasksSubcommand>,
+    },
+
+    /// Run collect + triage + status in one step
+    Sync,
+
+    /// Show prioritised morning status dashboard
+    Status {
+        /// Show only urgent (ACT NOW) items
+        #[arg(long, action = ArgAction::SetTrue)]
+        urgent: bool,
+
+        /// Output as JSON
+        #[arg(long, action = ArgAction::SetTrue)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum WorkflowsSubcommand {
+    /// Show details for a specific workflow
+    Show {
+        /// Workflow name
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TasksSubcommand {
+    /// Add a new task to Todoist
+    Add {
+        /// Task content
+        content: String,
+
+        /// Due date (natural language, e.g. "tomorrow", "next Monday")
+        #[arg(long)]
+        due: Option<String>,
+
+        /// Priority 1–4 (4 = urgent)
+        #[arg(long)]
+        priority: Option<u8>,
+    },
+
+    /// Complete (close) a task
+    Done {
+        /// Todoist task ID
+        id: String,
     },
 }

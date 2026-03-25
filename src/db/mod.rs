@@ -60,6 +60,50 @@ fn apply_schema(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
             records_added   INTEGER DEFAULT 0,
             PRIMARY KEY (source, source_path)
         );
+
+        -- Phase 3: Control Plane tables
+
+        -- Tracks last output time per workflow (updated by signal collector).
+        CREATE TABLE IF NOT EXISTS workflow_runs (
+            workflow_name   VARCHAR PRIMARY KEY,
+            last_output_at  VARCHAR,
+            output_path     VARCHAR
+        );
+
+        -- Signals: new/modified files detected in workflow output directories.
+        CREATE TABLE IF NOT EXISTS signals (
+            id               VARCHAR PRIMARY KEY,
+            workflow_name    VARCHAR NOT NULL,
+            file_path        VARCHAR NOT NULL,
+            detected_at      VARCHAR NOT NULL,
+            file_modified    VARCHAR NOT NULL,
+            content_preview  VARCHAR,
+            priority         VARCHAR,
+            triage_reason    VARCHAR,
+            suggested_action VARCHAR,
+            triaged_at       VARCHAR,
+            acknowledged     BOOLEAN DEFAULT false,
+            acknowledged_at  VARCHAR
+        );
+
+        -- Tracks the last scan time per output directory (for incremental collection).
+        CREATE TABLE IF NOT EXISTS collection_state (
+            directory        VARCHAR PRIMARY KEY,
+            last_scanned     VARCHAR NOT NULL,
+            last_file_mtime  VARCHAR
+        );
+
+        -- Observability: one row per triage LLM call.
+        CREATE TABLE IF NOT EXISTS triage_runs (
+            id               VARCHAR PRIMARY KEY,
+            timestamp        VARCHAR NOT NULL,
+            model            VARCHAR,
+            signals_triaged  INTEGER,
+            tokens_input     BIGINT,
+            tokens_output    BIGINT,
+            cost_usd         DOUBLE,
+            duration_ms      BIGINT
+        );
     ",
     )?;
     Ok(())
