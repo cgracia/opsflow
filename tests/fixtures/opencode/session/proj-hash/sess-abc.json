@@ -1,0 +1,10 @@
+{
+  "id": "sess-abc",
+  "title": "Refactor auth service",
+  "projectID": "proj-hash",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "time": {
+    "created": 1742896800,
+    "updated": 1742900400
+  }
+}
