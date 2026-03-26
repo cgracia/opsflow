@@ -14,6 +14,8 @@ pub struct RunMetadata {
     pub tokens_output: u64,
     pub tokens_input_estimated: bool,
     pub tokens_output_estimated: bool,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
     pub duration_ms: u128,
     pub praxis_version: String,
 }
@@ -32,6 +34,8 @@ pub fn build_metadata(
     model: &str,
     raw_input_tokens: Option<u64>,
     raw_output_tokens: Option<u64>,
+    cache_read_tokens: Option<u64>,
+    cache_write_tokens: Option<u64>,
     duration_ms: u128,
 ) -> RunMetadata {
     let (tokens_input, tokens_input_estimated) = match raw_input_tokens {
@@ -56,6 +60,8 @@ pub fn build_metadata(
         tokens_output,
         tokens_input_estimated,
         tokens_output_estimated,
+        cache_read_tokens: cache_read_tokens.unwrap_or(0),
+        cache_write_tokens: cache_write_tokens.unwrap_or(0),
         duration_ms,
         praxis_version: env!("CARGO_PKG_VERSION").to_string(),
     }
@@ -99,6 +105,8 @@ mod tests {
             "qwen3.5:9B",
             Some(50),
             Some(100),
+            None,
+            None,
             42,
         );
         assert_eq!(meta.tokens_input, 50);
@@ -112,7 +120,7 @@ mod tests {
         let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let input = "abcd"; // 4 chars → 1 token
         let output = "abcde"; // 5 chars → 2 tokens
-        let meta = build_metadata("id", ts, "think", input, output, "qwen3.5:9B", None, None, 10);
+        let meta = build_metadata("id", ts, "think", input, output, "qwen3.5:9B", None, None, None, None, 10);
         assert_eq!(meta.tokens_input, 1);
         assert_eq!(meta.tokens_output, 2);
         assert!(meta.tokens_input_estimated);
@@ -122,7 +130,7 @@ mod tests {
     #[test]
     fn build_metadata_mixed_tokens() {
         let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-        let meta = build_metadata("id", ts, "think", "input", "output", "model", Some(5), None, 0);
+        let meta = build_metadata("id", ts, "think", "input", "output", "model", Some(5), None, None, None, 0);
         assert_eq!(meta.tokens_input, 5);
         assert!(!meta.tokens_input_estimated);
         assert!(meta.tokens_output_estimated);
@@ -131,7 +139,7 @@ mod tests {
     #[test]
     fn build_metadata_records_lengths() {
         let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-        let meta = build_metadata("id", ts, "think", "hello", "world!", "m", None, None, 0);
+        let meta = build_metadata("id", ts, "think", "hello", "world!", "m", None, None, None, None, 0);
         assert_eq!(meta.input_length_chars, 5);
         assert_eq!(meta.output_length_chars, 6);
     }

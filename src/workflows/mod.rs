@@ -145,6 +145,8 @@ pub fn run_think(problem: &str, config: &PraxisConfig, options: ThinkOptions) ->
         &llm_response.model,
         llm_response.input_tokens,
         llm_response.output_tokens,
+        llm_response.cache_read_tokens,
+        llm_response.cache_write_tokens,
         duration_ms,
     );
 

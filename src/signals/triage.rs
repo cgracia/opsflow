@@ -31,6 +31,8 @@ pub struct TriageResult {
     pub model: String,
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
+    pub cache_read_tokens: Option<u64>,
+    pub cache_write_tokens: Option<u64>,
     pub duration_ms: u64,
 }
 
@@ -66,6 +68,8 @@ pub fn run_triage(
             model: config.llm_model.clone(),
             input_tokens: None,
             output_tokens: None,
+            cache_read_tokens: None,
+            cache_write_tokens: None,
             duration_ms: 0,
         });
     }
@@ -118,12 +122,14 @@ pub fn run_triage(
     let cost_usd = estimate_triage_cost(
         response.input_tokens,
         response.output_tokens,
+        response.cache_read_tokens,
         &response.model,
     );
     conn.execute(
         "INSERT INTO triage_runs
-             (id, timestamp, model, signals_triaged, tokens_input, tokens_output, cost_usd, duration_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             (id, timestamp, model, signals_triaged, tokens_input, tokens_output,
+              cache_read_tokens, cache_write_tokens, cost_usd, duration_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             Uuid::new_v4().to_string(),
             now,
@@ -131,6 +137,8 @@ pub fn run_triage(
             items_triaged as i64,
             response.input_tokens.map(|t| t as i64),
             response.output_tokens.map(|t| t as i64),
+            response.cache_read_tokens.map(|t| t as i64),
+            response.cache_write_tokens.map(|t| t as i64),
             cost_usd,
             duration_ms as i64
         ],
@@ -141,6 +149,8 @@ pub fn run_triage(
         model: response.model,
         input_tokens: response.input_tokens,
         output_tokens: response.output_tokens,
+        cache_read_tokens: response.cache_read_tokens,
+        cache_write_tokens: response.cache_write_tokens,
         duration_ms,
     })
 }
@@ -245,13 +255,16 @@ fn extract_json(text: &str) -> &str {
 }
 
 /// Very rough cost estimate based on model name prefix.
+/// Cache read tokens are billed at ~10% of the input rate; cache write tokens at ~125%.
 fn estimate_triage_cost(
     input_tokens: Option<u64>,
     output_tokens: Option<u64>,
+    cache_read_tokens: Option<u64>,
     model: &str,
 ) -> f64 {
     let in_tok = input_tokens.unwrap_or(0) as f64;
     let out_tok = output_tokens.unwrap_or(0) as f64;
+    let cache_read = cache_read_tokens.unwrap_or(0) as f64;
     let m = model.to_lowercase();
     // Approximate rates (USD per 1M tokens)
     let (in_rate, out_rate) = if m.contains("opus") {
@@ -263,7 +276,8 @@ fn estimate_triage_cost(
     } else {
         (1.0, 3.0) // local/unknown
     };
-    (in_tok * in_rate + out_tok * out_rate) / 1_000_000.0
+    let cache_read_rate = in_rate * 0.1;
+    (in_tok * in_rate + out_tok * out_rate + cache_read * cache_read_rate) / 1_000_000.0
 }
 
 #[cfg(test)]
@@ -326,15 +340,23 @@ mod tests {
 
     #[test]
     fn test_estimate_triage_cost_zero_tokens() {
-        let cost = estimate_triage_cost(None, None, "claude-sonnet-4");
+        let cost = estimate_triage_cost(None, None, None, "claude-sonnet-4");
         assert_eq!(cost, 0.0);
     }
 
     #[test]
     fn test_estimate_triage_cost_sonnet() {
         // 1000 input + 500 output with sonnet rates
-        let cost = estimate_triage_cost(Some(1000), Some(500), "claude-sonnet-4");
+        let cost = estimate_triage_cost(Some(1000), Some(500), None, "claude-sonnet-4");
         assert!(cost > 0.0);
         assert!(cost < 0.1); // sanity check
+    }
+
+    #[test]
+    fn test_estimate_triage_cost_cache_read_cheaper() {
+        // Cache read tokens should cost less than regular input tokens
+        let cost_no_cache = estimate_triage_cost(Some(1000), Some(0), None, "claude-sonnet-4");
+        let cost_with_cache = estimate_triage_cost(Some(0), Some(0), Some(1000), "claude-sonnet-4");
+        assert!(cost_with_cache < cost_no_cache);
     }
 }

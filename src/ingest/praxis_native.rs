@@ -21,6 +21,10 @@ struct MetaJson {
     #[serde(default)]
     tokens_output_estimated: bool,
     #[serde(default)]
+    cache_read_tokens: i64,
+    #[serde(default)]
+    cache_write_tokens: i64,
+    #[serde(default)]
     duration_ms: Option<i64>,
 }
 
@@ -98,8 +102,8 @@ fn parse_meta_file(
         &meta.model,
         meta.tokens_input,
         meta.tokens_output,
-        0,
-        0,
+        meta.cache_read_tokens,
+        meta.cache_write_tokens,
     );
 
     Ok(RunRecord {
@@ -111,8 +115,8 @@ fn parse_meta_file(
         role: None,
         input_tokens: meta.tokens_input,
         output_tokens: meta.tokens_output,
-        cache_read_tokens: 0,
-        cache_write_tokens: 0,
+        cache_read_tokens: meta.cache_read_tokens,
+        cache_write_tokens: meta.cache_write_tokens,
         tokens_estimated: is_estimated,
         data_quality: if is_estimated {
             "estimated".to_string()

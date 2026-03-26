@@ -12,6 +12,8 @@ pub struct LlmResponse {
     pub model: String,
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
+    pub cache_read_tokens: Option<u64>,
+    pub cache_write_tokens: Option<u64>,
 }
 
 pub enum StreamEvent<'a> {
@@ -81,9 +83,30 @@ struct StreamDelta {
 }
 
 #[derive(Deserialize)]
+struct PromptTokensDetails {
+    cached_tokens: Option<u64>,
+}
+
+#[derive(Deserialize)]
 struct Usage {
     prompt_tokens: Option<u64>,
     completion_tokens: Option<u64>,
+    /// OpenAI format: prompt_tokens_details.cached_tokens
+    prompt_tokens_details: Option<PromptTokensDetails>,
+    /// Anthropic format (passed through by LiteLLM / direct Anthropic API)
+    cache_read_input_tokens: Option<u64>,
+    cache_creation_input_tokens: Option<u64>,
+}
+
+impl Usage {
+    fn cache_read(&self) -> Option<u64> {
+        self.cache_read_input_tokens
+            .or_else(|| self.prompt_tokens_details.as_ref().and_then(|d| d.cached_tokens))
+    }
+
+    fn cache_write(&self) -> Option<u64> {
+        self.cache_creation_input_tokens
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -173,11 +196,12 @@ pub fn generate_response(
         .first()
         .and_then(|c| c.message.reasoning.clone());
 
-    let (input_tokens, output_tokens) = if let Some(usage) = chat_response.usage {
-        (usage.prompt_tokens, usage.completion_tokens)
-    } else {
-        (None, None)
-    };
+    let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
+        if let Some(usage) = chat_response.usage {
+            (usage.prompt_tokens, usage.completion_tokens, usage.cache_read(), usage.cache_write())
+        } else {
+            (None, None, None, None)
+        };
 
     let model = chat_response.model.unwrap_or_else(|| config.llm_model.clone());
 
@@ -187,6 +211,8 @@ pub fn generate_response(
         model,
         input_tokens,
         output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
     })
 }
 
@@ -213,6 +239,8 @@ fn read_streaming_response(
     let mut model = config.llm_model.clone();
     let mut input_tokens = None;
     let mut output_tokens = None;
+    let mut cache_read_tokens = None;
+    let mut cache_write_tokens = None;
 
     loop {
         line.clear();
@@ -244,6 +272,8 @@ fn read_streaming_response(
         if let Some(usage) = chunk.usage {
             input_tokens = usage.prompt_tokens.or(input_tokens);
             output_tokens = usage.completion_tokens.or(output_tokens);
+            cache_read_tokens = usage.cache_read().or(cache_read_tokens);
+            cache_write_tokens = usage.cache_write().or(cache_write_tokens);
         }
 
         for choice in chunk.choices {
@@ -277,6 +307,8 @@ fn read_streaming_response(
         model,
         input_tokens,
         output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
     })
 }
 
@@ -301,11 +333,12 @@ fn read_non_streaming_fallback(
 
     on_chunk(StreamEvent::Content(&text))?;
 
-    let (input_tokens, output_tokens) = if let Some(usage) = chat_response.usage {
-        (usage.prompt_tokens, usage.completion_tokens)
-    } else {
-        (None, None)
-    };
+    let (input_tokens, output_tokens, cache_read_tokens, cache_write_tokens) =
+        if let Some(usage) = chat_response.usage {
+            (usage.prompt_tokens, usage.completion_tokens, usage.cache_read(), usage.cache_write())
+        } else {
+            (None, None, None, None)
+        };
 
     let model = chat_response.model.unwrap_or_else(|| config.llm_model.clone());
 
@@ -315,6 +348,8 @@ fn read_non_streaming_fallback(
         model,
         input_tokens,
         output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
     })
 }
 

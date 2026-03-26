@@ -86,7 +86,7 @@ fn yaml_quote(s: &str) -> String {
 
 fn build_frontmatter(meta: &RunMetadata) -> String {
     format!(
-        "run_id: {}\ncommand: {}\nmodel: {}\ntimestamp: {}\nduration_ms: {}\ntokens_input: {}\ntokens_output: {}\ntokens_input_estimated: {}\ntokens_output_estimated: {}",
+        "run_id: {}\ncommand: {}\nmodel: {}\ntimestamp: {}\nduration_ms: {}\ntokens_input: {}\ntokens_output: {}\ntokens_input_estimated: {}\ntokens_output_estimated: {}\ncache_read_tokens: {}\ncache_write_tokens: {}",
         yaml_quote(&meta.run_id),
         yaml_quote(&meta.command),
         yaml_quote(&meta.model),
@@ -96,6 +96,8 @@ fn build_frontmatter(meta: &RunMetadata) -> String {
         meta.tokens_output,
         meta.tokens_input_estimated,
         meta.tokens_output_estimated,
+        meta.cache_read_tokens,
+        meta.cache_write_tokens,
     )
 }
 
@@ -107,7 +109,7 @@ mod tests {
 
     fn make_meta(model: &str) -> RunMetadata {
         let ts = Utc.with_ymd_and_hms(2024, 6, 15, 12, 0, 0).unwrap();
-        build_metadata("test-run-id", ts, "think", "input", "output", model, Some(10), Some(20), 100)
+        build_metadata("test-run-id", ts, "think", "input", "output", model, Some(10), Some(20), None, None, 100)
     }
 
     // --- yaml_quote ---

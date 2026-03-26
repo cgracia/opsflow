@@ -27,9 +27,13 @@ pub fn run(config: &PraxisConfig) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     if let (Some(input), Some(output)) = (result.input_tokens, result.output_tokens) {
+        let cache_note = match result.cache_read_tokens {
+            Some(n) if n > 0 => format!("  ({} cache hit)", n),
+            _ => String::new(),
+        };
         println!(
-            "  Tokens: {} in / {} out  ({:.0}ms)",
-            input, output, result.duration_ms
+            "  Tokens: {} in / {} out{}  ({:.0}ms)",
+            input, output, cache_note, result.duration_ms
         );
     }
 

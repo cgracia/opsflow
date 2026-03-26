@@ -95,17 +95,27 @@ fn apply_schema(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
 
         -- Observability: one row per triage LLM call.
         CREATE TABLE IF NOT EXISTS triage_runs (
-            id               VARCHAR PRIMARY KEY,
-            timestamp        VARCHAR NOT NULL,
-            model            VARCHAR,
-            signals_triaged  INTEGER,
-            tokens_input     BIGINT,
-            tokens_output    BIGINT,
-            cost_usd         DOUBLE,
-            duration_ms      BIGINT
+            id                 VARCHAR PRIMARY KEY,
+            timestamp          VARCHAR NOT NULL,
+            model              VARCHAR,
+            signals_triaged    INTEGER,
+            tokens_input       BIGINT,
+            tokens_output      BIGINT,
+            cache_read_tokens  BIGINT,
+            cache_write_tokens BIGINT,
+            cost_usd           DOUBLE,
+            duration_ms        BIGINT
         );
     ",
     )?;
+
+    // Migrations: add columns that may not exist in older databases.
+    // DuckDB supports ALTER TABLE ... ADD COLUMN IF NOT EXISTS.
+    conn.execute_batch(
+        "ALTER TABLE triage_runs ADD COLUMN IF NOT EXISTS cache_read_tokens  BIGINT;
+         ALTER TABLE triage_runs ADD COLUMN IF NOT EXISTS cache_write_tokens BIGINT;",
+    )?;
+
     Ok(())
 }
 
