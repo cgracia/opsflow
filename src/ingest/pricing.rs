@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const PRICING_URL: &str =
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -72,7 +72,6 @@ struct ModelPricing {
 pub struct PricingDb {
     /// All entries keyed by their canonical model name.
     models: HashMap<String, ModelPricing>,
-    cache_path: PathBuf,
 }
 
 impl PricingDb {
@@ -82,7 +81,6 @@ impl PricingDb {
     pub fn empty() -> Self {
         PricingDb {
             models: HashMap::new(),
-            cache_path: PathBuf::from("/tmp/ignored"),
         }
     }
 
@@ -92,7 +90,6 @@ impl PricingDb {
         let cache_path = praxis_dir.join(CACHE_FILENAME);
         let mut db = PricingDb {
             models: HashMap::new(),
-            cache_path: cache_path.clone(),
         };
 
         // Attempt to use cached file if fresh
@@ -228,7 +225,6 @@ mod tests {
     fn db_from_fallback() -> PricingDb {
         let mut db = PricingDb {
             models: HashMap::new(),
-            cache_path: PathBuf::from("/tmp/ignored"),
         };
         for entry in hardcoded_fallback() {
             db.models.insert(entry.key.clone(), entry);
