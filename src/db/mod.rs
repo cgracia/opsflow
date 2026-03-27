@@ -233,7 +233,8 @@ pub fn insert_run(conn: &Connection, r: &RunRecord) -> Result<(), Box<dyn std::e
 }
 
 /// Get the total number of runs in the database.
-pub fn run_count(conn: &Connection) -> Result<i64, Box<dyn std::error::Error>> {
+#[cfg(test)]
+fn run_count(conn: &Connection) -> Result<i64, Box<dyn std::error::Error>> {
     let mut stmt = conn.prepare("SELECT COUNT(*) FROM runs")?;
     let mut rows = stmt.query([])?;
     if let Some(row) = rows.next()? {
