@@ -16,7 +16,7 @@ use std::path::Path;
 #[derive(Debug, Deserialize)]
 struct CcusageReport {
     #[serde(rename = "type")]
-    report_type: Option<String>,
+    _report_type: Option<String>,
     data: Vec<CcusageSession>,
 }
 
