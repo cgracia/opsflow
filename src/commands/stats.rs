@@ -461,7 +461,12 @@ mod tests {
         insert_run(&conn, &make_run("r1", "opencode", "claude-sonnet-4", "2026-03-25T10:00:00Z", "myapp")).unwrap();
         insert_run(&conn, &make_run("r2", "praxis", "qwen3.5:9B", "2026-03-25T11:00:00Z", "praxis")).unwrap();
 
-        let opts = StatsOptions { by: None, since: Some("1d".to_string()), until: None, json: false };
+        let opts = StatsOptions {
+            by: None,
+            since: Some("2026-03-25".to_string()),
+            until: Some("2026-03-26".to_string()),
+            json: false,
+        };
         let stats = query_summary(&conn, &opts).unwrap();
         assert_eq!(stats.total_runs, 2);
         assert!(stats.total_input > 0);
