@@ -464,7 +464,7 @@ mod tests {
         let opts = StatsOptions {
             by: None,
             since: Some("2026-03-25".to_string()),
-            until: Some("2026-03-26".to_string()),
+            until: Some("2026-03-25".to_string()),
             json: false,
         };
         let stats = query_summary(&conn, &opts).unwrap();
