@@ -52,7 +52,7 @@ struct OcMessage {
     cache_read_input_tokens: i64,
     /// Always 0 in OpenCode — we calculate cost from tokens.
     #[serde(default)]
-    cost: f64,
+    _cost: f64,
     #[serde(default)]
     time_created: Option<i64>,
 }
