@@ -85,8 +85,6 @@ struct CreateTaskRequest<'a> {
 pub struct TodoistClient {
     api_key: String,
     client: Client,
-    /// Default project name to resolve to a project_id when creating tasks.
-    pub default_project: Option<String>,
 }
 
 impl TodoistClient {
@@ -106,7 +104,6 @@ impl TodoistClient {
         Ok(Self {
             api_key,
             client,
-            default_project: config.todoist_project.clone(),
         })
     }
 
