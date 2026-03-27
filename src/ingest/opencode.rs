@@ -51,7 +51,7 @@ struct OcMessage {
     #[serde(default)]
     cache_read_input_tokens: i64,
     /// Always 0 in OpenCode — we calculate cost from tokens.
-    #[serde(default)]
+    #[serde(rename = "cost", default)]
     _cost: f64,
     #[serde(default)]
     time_created: Option<i64>,
@@ -299,7 +299,7 @@ mod tests {
             "output_tokens": 300,
             "cache_creation_input_tokens": 100,
             "cache_read_input_tokens": 800,
-            "cost": 0,
+            "cost": 99.0,
             "time_created": 1742896900
         }"#;
         let path = dir.path().join("msg_msg-001.json");
@@ -317,6 +317,8 @@ mod tests {
         assert_eq!(run.cache_read_tokens, 800);
         assert!(!run.tokens_estimated);
         assert_eq!(run.data_quality, "reliable");
+        assert_eq!(run.cost_usd, 0.0);
+        assert!(run.cost_estimated);
         assert_eq!(run.role.unwrap(), "assistant");
     }
 
@@ -333,7 +335,7 @@ mod tests {
         let session_json = r#"{"id":"sess-abc","title":"Test","projectID":"proj-hash","model":"anthropic/claude-sonnet-4","time":{"created":1742896800,"updated":1742900400}}"#;
         std::fs::write(session_dir.join("sess-abc.json"), session_json).unwrap();
 
-        let msg_json = r#"{"id":"msg-001","sessionID":"sess-abc","role":"assistant","model":"anthropic/claude-sonnet-4","input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cost":0,"time_created":1742896900}"#;
+        let msg_json = r#"{"id":"msg-001","sessionID":"sess-abc","role":"assistant","model":"anthropic/claude-sonnet-4","input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cost":42.5,"time_created":1742896900}"#;
         std::fs::write(message_dir.join("msg_msg-001.json"), msg_json).unwrap();
 
         let praxis_dir = dir.path().join("praxis");
@@ -349,6 +351,16 @@ mod tests {
         let result2 = ingest(&conn, &pricing, &opencode_dir).unwrap();
         assert_eq!(result2.runs_added, 0);
         assert_eq!(result2.files_skipped, 2); // session + message
+
+        let mut stmt = conn
+            .prepare("SELECT cost_usd, cost_estimated FROM runs WHERE id = 'oc-msg-001'")
+            .unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        let row = rows.next().unwrap().unwrap();
+        let cost_usd: f64 = row.get(0).unwrap();
+        let cost_estimated: bool = row.get(1).unwrap();
+        assert_eq!(cost_usd, 0.0);
+        assert!(cost_estimated);
     }
 
     #[test]
