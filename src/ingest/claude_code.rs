@@ -278,7 +278,7 @@ mod tests {
         std::fs::write(&path, sample_jsonl()).unwrap();
 
         let pricing = empty_pricing();
-        let (session, runs) = parse_jsonl_file(&path, &pricing).unwrap();
+        let (session, _runs) = parse_jsonl_file(&path, &pricing).unwrap();
 
         assert_eq!(session.id, "sess-cc-001");
         assert_eq!(session.source, "claude-code");
