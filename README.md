@@ -231,9 +231,10 @@ Unreliable values are displayed with `~` prefixes. The data is useful for unders
 
 ```
 src/
-├── main.rs               # Entry point
+├── main.rs               # Entry point and CLI dispatch
 ├── cli/mod.rs            # Argument parsing (clap)
 ├── config/mod.rs         # Config resolution: defaults → file → env
+├── context/mod.rs        # Repository context detection
 ├── db/mod.rs             # DuckDB connection, schema, insert helpers
 ├── ingest/
 │   ├── mod.rs            # Orchestrator: scan sources, dispatch parsers, print summary
@@ -243,13 +244,26 @@ src/
 │   ├── claude_code.rs    # Parse Claude Code JSONL (with data quality warnings)
 │   └── ccusage.rs        # Import ccusage --json output
 ├── commands/
-│   ├── mod.rs
+│   ├── mod.rs            # Module entry
 │   ├── runs.rs           # praxis runs — list/filter runs
-│   └── stats.rs          # praxis stats — aggregate queries
+│   ├── stats.rs          # praxis stats — aggregate queries
+│   ├── discover.rs       # Discover and register workflows
+│   ├── collect.rs        # Collect signal data from workflows
+│   ├── signals.rs        # praxis signals — list/filter signals
+│   ├── status.rs         # praxis status — dashboard overview
+│   ├── sync.rs           # Sync workflow state
+│   ├── tasks.rs          # Todoist task management
+│   ├── triage.rs         # Triage unclassified signals
+│   └── workflows.rs      # praxis workflows — list/show workflows
+├── registry/mod.rs       # Workflow registry and discovery
+│   └── discover.rs       # Auto-discover workflow definitions
+├── signals/mod.rs        # Signal collection and triage
+│   └── triage.rs         # Signal triage workflow
 ├── llm/mod.rs            # OpenAI-compatible API client
 ├── observability/mod.rs  # Token estimation, run metadata
 ├── storage/mod.rs        # Artifact persistence
-└── workflows/mod.rs      # think workflow
+├── todoist/mod.rs        # Todoist API client
+└── workflows/mod.rs      # Think workflow
 ```
 
 ## Testing
