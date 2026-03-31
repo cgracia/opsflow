@@ -90,9 +90,23 @@ pub fn ingest(
                 runs_added += runs.len();
 
                 // Move processed file to imports/processed/
-                let processed_dir = path.parent().unwrap().join("processed");
+                let Some(parent) = path.parent() else {
+                    eprintln!(
+                        "warning: cannot determine parent directory for {}, skipping move to processed",
+                        path.display()
+                    );
+                    continue;
+                };
+                let processed_dir = parent.join("processed");
                 let _ = std::fs::create_dir_all(&processed_dir);
-                let dest = processed_dir.join(path.file_name().unwrap());
+                let Some(name) = path.file_name() else {
+                    eprintln!(
+                        "warning: cannot determine filename for {}, skipping move to processed",
+                        path.display()
+                    );
+                    continue;
+                };
+                let dest = processed_dir.join(name);
                 let _ = std::fs::rename(&path, dest);
             }
             Err(e) => {
@@ -267,6 +281,43 @@ mod tests {
         assert_eq!(run.source, "opencode");
         assert!(!run.tokens_estimated); // OpenCode counts are reliable
         assert_eq!(run.data_quality, "reliable");
+    }
+
+    #[test]
+    fn test_ccusage_handles_missing_path_components() {
+        // Verify edge-case paths that would cause unwrap() to panic:
+        //   Path::new("")  → parent() = None, file_name() = None
+        //   Path::new("/") → parent() = None, file_name() = None
+        // The production code must guard against these with if-let instead of unwrap.
+        for edge in [Path::new(""), Path::new("/")] {
+            assert!(
+                edge.parent().is_none() || edge.file_name().is_none(),
+                "edge-case path {:?} should lack parent or file_name",
+                edge
+            );
+        }
+
+        // Verify that normal ingestion still works correctly after the defensive fix
+        let dir = TempDir::new().unwrap();
+        let imports_dir = dir.path().join("imports");
+        std::fs::create_dir_all(&imports_dir).unwrap();
+
+        let (json, _) = sample_ccusage_json("ccusage-edge");
+        let src = imports_dir.join("ccusage-edge.json");
+        std::fs::write(&src, json).unwrap();
+
+        let praxis_dir = dir.path().join("praxis");
+        let conn = init_db(&praxis_dir).unwrap();
+
+        let result = ingest(&conn, &imports_dir).unwrap();
+        assert_eq!(result.runs_added, 1);
+        assert_eq!(result.sessions_added, 1);
+
+        // File should be moved to processed/ (happy path unchanged)
+        assert!(!src.exists());
+        assert!(imports_dir
+            .join("processed/ccusage-edge.json")
+            .exists());
     }
 
     #[test]
