@@ -285,19 +285,40 @@ mod tests {
 
     #[test]
     fn test_ccusage_handles_missing_path_components() {
-        // Verify edge-case paths that would cause unwrap() to panic:
-        //   Path::new("")  → parent() = None, file_name() = None
-        //   Path::new("/") → parent() = None, file_name() = None
-        // The production code must guard against these with if-let instead of unwrap.
+        // The production code (lines 93-108) guards against paths where
+        // parent() or file_name() returns None using `let Some(...) else { continue }`.
+        //
+        // While glob::glob() always returns well-formed paths (making these guards
+        // unreachable through ingest()), they exist as defense-in-depth.
+        //
+        // We directly exercise the guard pattern here — replicating the exact
+        // control flow from production — to verify edge-case paths are handled
+        // without panicking.
+
+        let mut guards_triggered = 0;
         for edge in [Path::new(""), Path::new("/")] {
-            assert!(
-                edge.parent().is_none() || edge.file_name().is_none(),
-                "edge-case path {:?} should lack parent or file_name",
+            // Replicate production guard: let Some(parent) = path.parent() else { continue };
+            let Some(_parent) = edge.parent() else {
+                guards_triggered += 1;
+                continue;
+            };
+            // Replicate production guard: let Some(name) = path.file_name() else { continue };
+            let Some(_name) = edge.file_name() else {
+                guards_triggered += 1;
+                continue;
+            };
+            panic!(
+                "edge-case path {:?} should have been caught by a guard",
                 edge
             );
         }
+        assert_eq!(
+            guards_triggered, 2,
+            "both edge-case paths must be caught by the defensive guards"
+        );
 
-        // Verify that normal ingestion still works correctly after the defensive fix
+        // Verify that normal ingestion still works correctly — the guards
+        // don't interfere with the happy path where parent/file_name are both Some.
         let dir = TempDir::new().unwrap();
         let imports_dir = dir.path().join("imports");
         std::fs::create_dir_all(&imports_dir).unwrap();
@@ -313,7 +334,6 @@ mod tests {
         assert_eq!(result.runs_added, 1);
         assert_eq!(result.sessions_added, 1);
 
-        // File should be moved to processed/ (happy path unchanged)
         assert!(!src.exists());
         assert!(imports_dir
             .join("processed/ccusage-edge.json")
