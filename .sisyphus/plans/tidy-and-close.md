@@ -126,7 +126,7 @@ Wave 1 (sequential):
 
   **Commit**: NO (groups with Task 2)
 
-- [ ] 2. Commit the gitignore update and completed plan
+- [x] 2. Commit the gitignore update and completed plan
 
   **What to do**:
   - Stage `.gitignore` and `.sisyphus/plans/dead-code-warning-cleanup.md`

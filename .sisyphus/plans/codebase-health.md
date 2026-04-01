@@ -121,7 +121,7 @@ Max Concurrent: 3 (Wave 1)
 
 ## TODOs
 
-- [ ] 1. Fix ccusage production unwraps (TDD)
+- [x] 1. Fix ccusage production unwraps (TDD)
 
   **What to do**:
   - **RED first**: Add a test `test_ccusage_handles_missing_path_components` that calls the processed-file move logic with a path that has no parent (e.g., a bare filename `Path::new("file.json")`) and verifies: no panic, ingest still succeeds, a warning is emitted or the file is simply skipped.
@@ -211,7 +211,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/ingest/ccusage.rs`
   - Pre-commit: `cargo test --locked`
 
-- [ ] 2. Add GitHub Actions CI workflow
+- [x] 2. Add GitHub Actions CI workflow
 
   **What to do**:
   - Create `.github/workflows/ci.yml` with the following specification:
@@ -293,7 +293,7 @@ Max Concurrent: 3 (Wave 1)
   - Message: `ci: add GitHub Actions workflow for fmt, build, test, and clippy`
   - Files: `.github/workflows/ci.yml`
 
-- [ ] 3. Sync README architecture section with current module structure
+- [x] 3. Sync README architecture section with current module structure
 
   **What to do**:
   - Update the "Architecture" section of `README.md` to reflect the actual current module structure
@@ -380,19 +380,19 @@ Max Concurrent: 3 (Wave 1)
 > **Do NOT auto-proceed after verification. Wait for user's explicit approval before marking work complete.**
 > **Never mark F1-F4 as checked before getting user's okay.** Rejection or user feedback -> fix -> re-run -> present again -> wait for okay.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, curl endpoint, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in `.sisyphus/evidence/`. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `cargo fmt --all -- --check` + `cargo build --locked` + `cargo test --locked` + `cargo clippy --locked --all-targets -- -D warnings`. Review all changed files for: `as any` equivalents, empty catches, console.log equivalents, commented-out code, unused imports.
   Output: `Fmt [PASS/FAIL] | Build [PASS/FAIL] | Tests [N pass/N fail] | Clippy [PASS/FAIL] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high`
+- [x] F3. **Real Manual QA** — `unspecified-high`
   Start from clean state. Execute EVERY QA scenario from EVERY task — follow exact steps, capture evidence. Test cross-task integration. Save to `.sisyphus/evidence/final-qa/`.
   Output: `Scenarios [N/N pass] | Integration [N/N] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff (git log/diff). Verify 1:1 — everything in spec was built (no missing), nothing beyond spec was built (no creep). Check "Must NOT do" compliance. Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Unaccounted [CLEAN/N files] | VERDICT`
 
@@ -418,7 +418,7 @@ test -f .github/workflows/ci.yml                              # Expected: file e
 ```
 
 ### Final Checklist
-- [ ] CI workflow runs on push to master + pull_request
-- [ ] Zero production unwrap() in ccusage.rs
-- [ ] README architecture section accurate
-- [ ] All `cargo` commands pass clean
+- [x] CI workflow runs on push to master + pull_request
+- [x] Zero production unwrap() in ccusage.rs
+- [x] README architecture section accurate
+- [x] All `cargo` commands pass clean
