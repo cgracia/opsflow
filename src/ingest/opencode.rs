@@ -8,6 +8,7 @@ use crate::ingest::pricing::PricingDb;
 use crate::ingest::{IngestResult, RunRecord, SessionRecord};
 use duckdb::Connection;
 use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -40,7 +41,7 @@ struct OcMessage {
     session_id: String,
     #[serde(default)]
     role: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_model")]
     model: Option<String>,
     #[serde(default)]
     input_tokens: i64,
@@ -53,7 +54,7 @@ struct OcMessage {
     /// Always 0 in OpenCode — we calculate cost from tokens.
     #[serde(rename = "cost", default)]
     _cost: f64,
-    #[serde(default)]
+    #[serde(default, alias = "time", deserialize_with = "deserialize_time_created")]
     time_created: Option<i64>,
 }
 
@@ -228,6 +229,60 @@ fn parse_message_file(
     })
 }
 
+fn deserialize_model<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    let Some(value) = value else {
+        return Ok(None);
+    };
+
+    match value {
+        Value::String(s) => Ok(Some(s)),
+        Value::Object(map) => {
+            let provider = map
+                .get("providerID")
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty());
+            let model = map
+                .get("modelID")
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty());
+
+            Ok(match (provider, model) {
+                (Some(provider), Some(model)) => Some(format!("{provider}/{model}")),
+                (_, Some(model)) => Some(model.to_string()),
+                _ => None,
+            })
+        }
+        _ => Ok(None),
+    }
+}
+
+fn deserialize_time_created<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(extract_created_timestamp(value.as_ref()))
+}
+
+fn extract_created_timestamp(value: Option<&Value>) -> Option<i64> {
+    let raw = match value? {
+        Value::Number(n) => n.as_i64(),
+        Value::Object(map) => map.get("created").and_then(Value::as_i64),
+        _ => None,
+    }?;
+
+    // Newer OpenCode payloads store timestamps in milliseconds.
+    if raw > 10_000_000_000 {
+        Some(raw / 1000)
+    } else {
+        Some(raw)
+    }
+}
+
 fn unix_secs_to_iso(secs: i64) -> String {
     use chrono::{DateTime, Utc};
     DateTime::<Utc>::from(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs as u64))
@@ -320,6 +375,34 @@ mod tests {
         assert_eq!(run.cost_usd, 0.0);
         assert!(run.cost_estimated);
         assert_eq!(run.role.unwrap(), "assistant");
+    }
+
+    #[test]
+    fn test_parse_message_json_with_structured_model_and_time() {
+        let dir = TempDir::new().unwrap();
+        let json = r#"{
+            "id": "msg-002",
+            "sessionID": "sess-abc",
+            "role": "user",
+            "model": {
+                "providerID": "er",
+                "modelID": "claude-4-6-opus"
+            },
+            "time": {
+                "created": 1771839318125
+            }
+        }"#;
+        let path = dir.path().join("msg_msg-002.json");
+        std::fs::write(&path, json).unwrap();
+
+        let pricing = empty_pricing();
+        let run = parse_message_file(&path, &pricing).unwrap();
+
+        assert_eq!(run.id, "oc-msg-002");
+        assert_eq!(run.session_id.unwrap(), "sess-abc");
+        assert_eq!(run.model.as_deref(), Some("er/claude-4-6-opus"));
+        assert_eq!(run.role.as_deref(), Some("user"));
+        assert_eq!(run.timestamp, "2026-02-23T09:35:18+00:00");
     }
 
     #[test]
