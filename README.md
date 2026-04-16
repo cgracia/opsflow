@@ -2,6 +2,18 @@
 
 Instrument your AI usage. Understand where your tokens go.
 
+## Why
+
+I use multiple AI coding tools daily — OpenCode, Claude Code, local models via Ollama. I had no visibility into which models were actually performing, where my tokens were going, or whether expensive features like extended thinking were paying off for anything.
+
+Existing tools like Langfuse are built for production LLM applications. They are not built for developer workflows where you want to know: "across 700 coding sessions, which model gave me the best results for which type of task, and what did it cost?"
+
+Praxis fills that gap. It sits below the AI tools you already use, reads their log files, and gives you a queryable history of your actual usage.
+
+> **Status: Alpha.** Claude Code ingestion works. OpenCode ingestion is in progress (schema parser WIP). Data is local, no cloud dependencies.
+
+---
+
 Praxis is a terminal-native observability layer for AI-assisted workflows. It ingests session logs from OpenCode and Claude Code, normalises them into a local DuckDB database, and makes them queryable — so you can answer real questions about your AI usage.
 
 ```
