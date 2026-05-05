@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "praxis")]
-#[command(about = "AI workflow observability and control plane — instrument, ingest, triage, and act")]
+#[command(about = "Control plane for AI-augmented operations — observe, triage, and act")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]

@@ -1,38 +1,30 @@
 # Praxis — Vision
 
-**Status:** Phase 2 (AI Workflow Observability)
-**Last updated:** 2026-03-25
+**Status:** Phase 3 (Control Plane)
+**Last updated:** 2026-05-05
 
 ---
 
 ## The problem
 
-AI usage today is unstructured, ephemeral, and opaque.
-
-Chat-based interaction produces inconsistent quality. Valuable reasoning disappears when the conversation ends. There's no visibility into cost, performance, or output quality. No feedback loops. No way to know whether a local model would have been sufficient, whether the same prompt performs better with a different model, or how much you spent this month on things you could have done in your head.
-
-Most tools in this space are building agents — autonomous systems that act on your behalf. Praxis goes the other direction: structured tools that help *you* think better, with full observability into what happened and what it cost.
+Technical support at scale generates more signal than any manager can process manually. Tickets, fleet telemetry, SLA clocks, team knowledge, weekly metrics. The standard response is more headcount or more dashboards. Neither scales past a certain point. What I needed was a reasoning layer across all of it, surfacing what actually needs action.
 
 ## Thesis
 
-AI should be treated like a system, not a conversation.
+AI should be treated like a system, not a conversation. Applied to operations, that means structured workflows, persistent artifacts, measurable execution, and continuous optimisation instead of guesswork.
 
-That means:
+Praxis applies systems thinking and observability principles to AI-augmented operations management.
 
-- **Structured workflows** instead of freeform prompts
-- **Persistent artifacts** instead of ephemeral answers
-- **Measurable execution** instead of hidden behaviour
-- **Continuous optimisation** instead of guesswork
+## Phase 2 pivot: AI workflow observability (complete)
 
-Praxis applies systems thinking and observability principles to personal AI usage.
+Phase 1 (the `think` command) delivered on the structured workflow and observability ideas. Phase 2 extended this into cross-source analytics: ingesting logs from OpenCode, Claude Code, and Praxis itself into DuckDB, with cost calculation via the LiteLLM pricing database.
 
-## Phase 2 pivot: the real value is observability
-
-Phase 1 (the `think` command) delivered on the structured workflow and observability ideas. But the real insight from Phase 1 usage is that the *data* is more valuable than the *workflow tool*.
-
-**The thesis for Phase 2:** instrument actual AI usage across all your tools, index it, and make it queryable. Don't limit Praxis to its own runs — absorb everything. OpenCode, Claude Code, and Praxis native runs all generate logs. Those logs contain the data you need to answer real questions.
-
-Phase 2 makes Praxis the observability layer for AI-assisted work, not just a structured prompting tool.
+Key deliverables (shipped):
+- `praxis ingest` — scan log directories, normalise, load into DuckDB
+- `praxis runs` — list/filter AI activity
+- `praxis stats` — aggregates by day, model, project, source
+- LiteLLM pricing engine for cost calculation
+- Data quality tracking (reliable vs. unreliable token counts)
 
 ## Design decisions — Phase 2
 
@@ -55,11 +47,9 @@ OpenCode session/message JSON files contain reliable token counts from API respo
 
 ## Who this is for
 
-Technical professionals who already use AI heavily and feel the pain of unstructured usage. People who have built ad-hoc scripts, prompt templates, or personal workflows around AI — and want something coherent.
+Technical managers and operators running complex support or reliability functions. People who have built ad-hoc scripts, dashboards, or personal workflows around their operations, and want something coherent that sits across their existing tooling.
 
-Comfortable in a terminal. Already using AI for decision-making, analysis, and planning. Frustrated by the lack of structure, persistence, and visibility. Value explicit systems over magical abstractions.
-
-Not for people who want a chatbot, a no-code builder, or a general-purpose assistant.
+Comfortable in a terminal. Already using AI for decision-making, analysis, and planning. Frustrated by the gap between what the tools show and what actually needs attention. Value explicit systems over magical abstractions.
 
 ## Core principles
 
@@ -96,44 +86,25 @@ Each phase is independently useful. No phase requires the next to deliver value.
 
 One workflow (`think`), one artifact format, observability from day one.
 
-*Validation: did I reach for `praxis think` instead of opening a chat window?*
+### Phase 2 — AI Workflow Observability (complete)
 
-### Phase 2 — AI Workflow Observability (current)
+Ingest logs from OpenCode and Claude Code into DuckDB. Unified cross-source analytics with cost calculation.
 
-Ingest logs from OpenCode and Claude Code into DuckDB. Query that data: `praxis runs`, `praxis stats`. Unified cross-source analytics in a local database.
+### Phase 3 — Control Plane (current)
 
-Key deliverables:
-- `praxis ingest` — scan log directories, normalise, load into DuckDB
-- `praxis runs` — list/filter AI activity
-- `praxis stats` — aggregates by day, model, project, source
-- LiteLLM pricing engine for cost calculation
-- Data quality tracking (reliable vs. unreliable token counts)
+Operational decision-making from the observability foundation. Workflow discovery, signal collection, LLM triage, task management, morning status dashboard. See above for deliverables.
 
-*Validation: can I answer "how much did AI cost me this week" and "which model am I using most" with real data?*
+### Phase 4 — Model comparison and optimisation (planned)
 
-### Phase 3 — Model comparison and optimisation
+A/B analysis across models. Usage patterns correlated with outcomes. Anomaly detection (sessions that cost 10x more than normal).
 
-A/B analysis across models. "Which model gives better results for which kind of task?" Usage patterns correlated with outcomes. Anomaly detection (sessions that cost 10x more than normal).
+### Phase 5 — Context and memory (planned)
 
-*Validation: does the data reveal something actionable about model choice or usage patterns?*
+Local RAG over accumulated artifacts. Feed previous thinking into new runs. Graph context linking related decisions.
 
-### Phase 4 — Context and memory
-
-Local RAG over accumulated artifacts. Feed previous thinking into new runs. Graph context linking related decisions. Explicit project context, policy-controlled file access, and artifact provenance become first-class concepts.
-
-*Validation: does Praxis surface relevant past thinking when working on a related problem?*
-
-### Phase 5 — Tool execution and composition
-
-Workflow composition (output of one feeds input of another). Plugin system for external data sources. Script execution within workflows.
-
-*Validation: can I build a pipeline that pulls data, reasons about it, and produces a recommendation — in one invocation?*
-
-### Phase 6 — Integrations
+### Phase 6 — Integrations (planned)
 
 Connectors for external systems. Ingestion pipelines. The system becomes a hub for structured AI interaction across your toolchain.
-
-*Validation: does Praxis replace the ad-hoc scripts I've built for work automation?*
 
 ## Technical decisions
 
@@ -153,13 +124,12 @@ Connectors for external systems. Ingestion pipelines. The system becomes a hub f
 2. **Scope creep before validation.** Building RAG and integrations before the core loop works daily.
 3. **Prompt mediocrity.** If the workflows produce generic, verbose, hedge-everything output, the structured format is just overhead. The prompts are the product.
 
-## What would validate Phase 2
+## What would validate Phase 3
 
-1. **Daily `praxis ingest && praxis stats`.** Running this every morning feels like something worth doing.
-2. **Surprise insights.** The data reveals something non-obvious about model usage, cost, or workflow patterns.
-3. **Real cost visibility.** "How much did AI cost me this week?" answered with real data, not estimates.
-4. **Project attribution.** "Which of my projects is most AI-intensive?" answered from the database.
+1. **Daily `praxis sync && praxis status`.** Running this every morning surfaces the right things to act on.
+2. **Signal triage reduces morning review time.** The five things that matter are already surfaced, not buried in Slack and Jira.
+3. **Workflow health visibility.** Knowing which operational reports are stale before someone complains.
 
 ## Differentiation
 
-The closest tool in this space is [ccusage](https://github.com/ryoppippi/ccusage) — log parsing and cost calculation. Praxis differs in three ways: unified cross-source analytics in a persistent database (not per-session reports), structured reasoning workflows with artifacts, and a deliberate evolution toward model comparison and cross-run memory. The database layer is the moat — it turns personal AI usage into a dataset you can learn from over time.
+The closest tool in this space is [ccusage](https://github.com/ryoppippi/ccusage) for log parsing and cost calculation. Praxis differs in three ways: it is a control plane for operations (not just cost tracking), it connects workflow outputs to triage and task management, and it produces a prioritised action dashboard rather than raw analytics. The signal layer is the moat: structured outputs from real operational workflows, triaged by LLM, surfaced as action items.
