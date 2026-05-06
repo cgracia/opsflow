@@ -1,10 +1,10 @@
-# Praxis
+# opsflow
 
-A control plane for running a technical support operation with AI in the loop, built to replace the spreadsheets, Slack threads, and tribal knowledge that break down at scale.
+An AI control plane for running a technical support operation, built to replace the spreadsheets, Slack threads, and tribal knowledge that break down at scale.
 
 ## The problem
 
-Technical support at scale generates more signal than any manager can process manually. Tickets arrive from multiple channels, SLA clocks run in parallel, fleet telemetry produces anomalies overnight, and the team's accumulated knowledge lives across wiki pages that are hard to search well. The standard response is more headcount or more dashboards. Neither scales. What I needed was a reasoning layer that could sit across ticketing, documentation, device data, and team context, and surface the five things I actually need to act on before standup.
+Technical support at scale generates more signal than any manager can process manually. Tickets arrive from multiple channels, SLA clocks run in parallel, fleet telemetry produces anomalies overnight, and the team's accumulated knowledge lives across wiki pages that are hard to search well. The standard response is more headcount or more dashboards. Neither scales. What is needed is a reasoning layer that can sit across ticketing, documentation, device data, and team context, and surface the five things that actually need action before standup.
 
 ## What it does
 
@@ -22,15 +22,11 @@ The system uses a multi-agent architecture in a Council of Experts pattern: each
 
 ## Why I built it
 
-I was running a support function where the ticket backlog had grown beyond what manual triage could handle reliably. The existing tooling worked at low volume but fell apart under load. I built Praxis to bring those sources into a single reasoning layer so I could make better decisions faster, and so the team could stop answering the same questions from memory.
+I wanted a reasoning layer for support operations that I could actually run: something that surfaces the five things worth acting on before standup rather than adding another dashboard to watch. Built from personal experience with the problem; the integrations and operational data are not included in this repository.
 
 ## Status
 
-Alpha. This repository is a sanitised subset of the internal system, published as a demonstration of the architecture and approach. The operational data and integrations are not included.
-
-## Future improvements
-
-- Architecture diagram and sample `praxis status` output
+Alpha, in active development. Architecture and agent design are stable; integrations and configuration are a work in progress.
 
 ## Licence
 
