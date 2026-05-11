@@ -1,0 +1,183 @@
+specification {
+  element actor {
+    style {
+      shape person
+    }
+  }
+  element system
+  element component
+  element storage {
+    style {
+      shape storage
+    }
+  }
+
+  relationship async
+}
+
+model {
+  operator = actor 'Operator' {
+    description 'Technical manager or on-call engineer who triggers investigations and reviews outputs'
+  }
+
+  signalSources = system 'Signal Sources' {
+    description 'External systems producing tickets, alerts, events, runbooks, telemetry, and logs'
+    style {
+      color secondary
+    }
+  }
+
+  llmProvider = system 'LLM Provider' {
+    description 'OpenAI-compatible API (cloud or local via Ollama)'
+    technology 'OpenAI-compatible'
+    style {
+      color secondary
+    }
+  }
+
+  opsflow = system 'OpsFlow' {
+    description 'AI-native incident investigation layer'
+    style {
+      color primary
+    }
+
+    api = component 'FastAPI API' {
+      description 'REST API exposing investigation endpoints and health checks'
+      technology 'Python 3.12 / FastAPI'
+      icon tech:python
+      style {
+        color green
+      }
+    }
+    orchestrator = component 'Investigation Orchestrator' {
+      description '7-phase pipeline: signal ingestion through output generation'
+      technology 'Python'
+      style {
+        color green
+      }
+    }
+    specialists = component 'Specialist Investigators' {
+      description 'Telemetry Investigator and Historical Incident Investigator'
+      technology 'Python'
+      style {
+        color green
+      }
+    }
+    retrieval = component 'Evidence Retrieval' {
+      description 'Hybrid dense + sparse search fused via reciprocal rank fusion'
+      technology 'Python / Qdrant Client'
+      style {
+        color green
+      }
+    }
+    governance = component 'Governance Engine' {
+      description 'Action classification, escalation gating, human-in-the-loop enforcement'
+      technology 'Python'
+      style {
+        color amber
+      }
+    }
+    postgres = storage 'PostgreSQL 17' {
+      description 'Entity store: accounts, sites, fleets, devices, deployments, tickets, incidents'
+      technology 'PostgreSQL 17'
+      icon tech:postgresql
+    }
+    qdrant = storage 'Qdrant' {
+      description 'Evidence store with hybrid dense + sparse vectors and RRF fusion'
+      technology 'Qdrant'
+    }
+    langfuse = component 'Langfuse' {
+      description 'AI observability: trace collection, prompt logging, evaluation'
+      technology 'Langfuse 3 (self-hosted)'
+      style {
+        color indigo
+      }
+    }
+    clickhouse = storage 'ClickHouse' {
+      description 'Langfuse analytics backend for trace aggregation'
+      technology 'ClickHouse'
+    }
+    redis = storage 'Redis' {
+      description 'Langfuse session and queue backend'
+      technology 'Redis 7'
+      icon tech:redis
+    }
+    prometheus = component 'Prometheus' {
+      description 'Metrics scraping from the FastAPI instrumentator'
+      technology 'Prometheus'
+      icon tech:prometheus
+      style {
+        color gray
+      }
+    }
+    grafana = component 'Grafana' {
+      description 'Operational dashboards visualising Prometheus metrics'
+      technology 'Grafana'
+      icon tech:grafana
+      style {
+        color gray
+      }
+    }
+  }
+
+  operator -> opsflow.api 'Triggers investigations via REST API'
+  operator -> opsflow.grafana 'Reviews dashboards'
+  signalSources -> opsflow.api 'Tickets, alerts, events'
+  opsflow.api -> opsflow.orchestrator 'Investigation request'
+  opsflow.orchestrator -> opsflow.postgres 'Resolve entity graph'
+  opsflow.orchestrator -> opsflow.retrieval 'Retrieve evidence'
+  opsflow.orchestrator -> opsflow.specialists 'Dispatch investigations'
+  opsflow.orchestrator -> opsflow.governance 'Evaluate governance'
+  opsflow.orchestrator -> llmProvider 'Hypothesis generation, briefings'
+  opsflow.specialists -> opsflow.qdrant 'Query evidence by entity'
+  opsflow.specialists -> llmProvider 'Analyze findings'
+  opsflow.retrieval -> opsflow.qdrant 'Hybrid search (dense + sparse)'
+  opsflow.orchestrator -> opsflow.langfuse 'Emit investigation spans'
+  opsflow.specialists -> opsflow.langfuse 'Emit specialist spans'
+  opsflow.langfuse -> opsflow.clickhouse 'Store aggregated traces'
+  opsflow.langfuse -> opsflow.redis 'Session and queue'
+  opsflow.api -> opsflow.prometheus 'Expose metrics'
+  opsflow.prometheus -> opsflow.grafana 'Scrape and visualise'
+}
+
+views {
+  view index {
+    title 'OpsFlow - System Context'
+    include *
+  }
+
+  view containerView of opsflow {
+    title 'OpsFlow - Container View'
+    include *
+  }
+
+  view investigationFlow {
+    title 'OpsFlow - Investigation Flow (7 Phases)'
+    include
+      operator,
+      signalSources,
+      opsflow.api,
+      opsflow.orchestrator,
+      opsflow.postgres,
+      opsflow.retrieval,
+      opsflow.qdrant,
+      opsflow.specialists,
+      opsflow.governance,
+      llmProvider,
+      opsflow.langfuse
+  }
+
+  view observabilityStack {
+    title 'OpsFlow - Observability Stack'
+    include
+      operator,
+      opsflow.api,
+      opsflow.orchestrator,
+      opsflow.specialists,
+      opsflow.langfuse,
+      opsflow.clickhouse,
+      opsflow.redis,
+      opsflow.prometheus,
+      opsflow.grafana
+  }
+}

@@ -16,7 +16,6 @@ A single end-to-end investigation pipeline that proves the core thesis: structur
 - Full trace emission to Langfuse for every investigation phase
 - Synthetic seed data for demonstration and development
 - Docker Compose stack: Postgres, Qdrant, Langfuse (with ClickHouse and Redis), Prometheus, Grafana
-- Rust CLI (`praxis`) for AI workflow observability (independent of the investigation engine)
 
 **What validates this version:**
 

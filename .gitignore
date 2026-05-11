@@ -1,4 +1,5 @@
 /target
+/dist
 
 # Sisyphus orchestration artifacts
 .sisyphus/*

@@ -1,12 +1,31 @@
 # Architecture
 
-OpsFlow is a governed operational intelligence platform that converges signals from tickets, alerts, and events into structured investigations across a hierarchical entity model. This document describes how the system is built, why key decisions were made, and how data flows through the pipeline.
+OpsFlow is a structured investigation pipeline that converges signals from tickets, alerts, and events into governed investigations across a hierarchical entity model. This document describes how the system is built, why key decisions were made, and how data flows through the pipeline.
+
+> **Note:** This is an alpha-stage personal project. See the "Current implementation status" section below for what is real vs. stubbed.
+
+## Current implementation status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| 7-phase orchestrator | Working | Runs end-to-end on synthetic data |
+| Entity model (10 types) | Working | SQLAlchemy models, seeded via `/seed` endpoint |
+| Hybrid retrieval | Architecture real, vectors fake | Qdrant RRF fusion works; dense vectors are SHA-256 hashes, sparse vectors are word-count bags |
+| Telemetry specialist | Working (rule-based) | Keyword matching on evidence content; LLM optional |
+| Historical specialist | Working (rule-based) | Pattern detection from historical tickets; LLM optional |
+| Governance engine | Working | EXECUTE blocked, severity/sensitivity gating functional |
+| Hypothesis generation | Working (rule-based fallback) | LLM path supported; defaults to rule-based when no LLM key |
+| Output generation | Working | Template-based operator briefing and customer response draft |
+| Langfuse tracing | Working | Every phase emits spans with evidence, hypotheses, governance |
+| Signal connectors | Stub | Receives signal IDs, does not connect to external systems |
+| Entity resolution | Demo-shaped | Hardcoded for the seed scenario; not tested on ambiguous graphs |
+| Time-bounded retrieval | Stub | `search_time_window` exists but does not filter by time |
 
 ## System Overview
 
 Distributed technical operations produce more signal than any team can process manually. Tickets arrive from customer channels. Alerts fire from fleet monitoring. Events stream from deployment pipelines and device telemetry. Each signal type lives in its own system with its own data model and its own timeline.
 
-OpsFlow treats these as different entry points into the same problem space. A navigation error reported as a ticket, an anomaly alert from fleet telemetry, and a deployment event are not three separate things to triage independently. They are three signals pointing at the same incident, and the system needs to converge them, reason across the entity graph, retrieve relevant evidence, and produce a bounded, traceable output.
+OpsFlow treats these as different entry points into the same problem space. A navigation error reported as a ticket, an anomaly alert from fleet telemetry, and a deployment event are not three separate things to triage independently. They are three signals pointing at the same incident, and the system converges them, reasons across the entity graph, retrieves relevant evidence, and produces a bounded, traceable output.
 
 The core constraint: the system investigates and recommends. It does not autonomously execute changes against production. Every output passes through a governance layer. EXECUTE actions are blocked. Human-in-the-loop escalation is mandatory for high-severity customer-facing incidents.
 
@@ -40,21 +59,26 @@ The orchestrator is not an autonomous agent. It is a structured workflow engine 
 
 Domain-scoped investigator tools, each responsible for a narrow analysis task:
 
-**Telemetry Investigator** (`telemetry.py`). Analyzes device and fleet telemetry for the entities under investigation. Retrieves telemetry snapshots from Qdrant, applies rule-based pattern detection (navigation error rates, sensor fusion latency, temporal correlations with deployment changes), and returns a structured `TelemetryReport` with findings, anomalies, an event timeline, and a confidence score.
+**Telemetry Investigator** (`telemetry.py`). Queries Qdrant for telemetry evidence filtered by device and fleet IDs. Analyzes retrieved snapshots using rule-based keyword detection — looks for terms like `navigation_error_rate`, `sensor_fusion_latency`, and temporal correlation keywords. Returns a structured `TelemetryReport` with findings, anomalies, an event timeline, and a confidence score derived from evidence strength.
 
-**Historical Incident Investigator** (`historical.py`). Searches past tickets, runbooks, and deployment records for similar incidents. Identifies recurring patterns (post-update failures, sensor fusion latency issues, SLA-impacting events), detects deployment adjacency (was there a software rollout coinciding with the incident?), and returns a `HistoricalReport` with similar incidents, recurring patterns, deployment adjacency data, and known issues.
+**Historical Incident Investigator** (`historical.py`). Searches Qdrant for past tickets, runbooks, and deployment records across three separate queries. Identifies recurring patterns through keyword matching (navigation failures, sensor fusion issues, SLA impacts), detects deployment adjacency from halted deployment metadata, and returns a `HistoricalReport` with similar incidents, recurring patterns, and known issues.
 
-Both specialists can operate with or without an LLM. Without an LLM, they use rule-based analysis over the retrieved evidence. With an LLM, they can perform deeper reasoning. This fallback design ensures the system degrades gracefully.
+Both specialists can operate with or without an LLM. The current implementation uses the rule-based path by default. With an LLM configured, they can perform deeper reasoning over the retrieved evidence. This fallback design ensures the system degrades gracefully.
 
 ### Retrieval Layer (`python/app/retrieval/`)
 
-Hybrid search over Qdrant combining dense semantic vectors and sparse keyword vectors, fused via reciprocal rank fusion (RRF).
+Hybrid search over Qdrant combining dense vectors and sparse vectors, fused via reciprocal rank fusion (RRF).
 
-The `search_evidence` function sends two parallel prefetch requests to Qdrant: a dense vector search for semantic similarity and a sparse vector search (BM25-style keyword matching) for exact term relevance. Qdrant merges the results using RRF, which balances recall from semantic search with precision from keyword matching.
+The `search_evidence` function sends two parallel prefetch requests to Qdrant: a dense vector search for semantic similarity and a sparse vector search for keyword relevance. Qdrant merges the results using RRF, which balances recall from dense search with precision from keyword search.
 
-Filtering is first-class. Every search accepts `entity_ids` and `source_types` parameters that become Qdrant `Filter` conditions on payload metadata. This means "show me telemetry evidence for device DEV-401 in fleet FLT-101" is a single filtered hybrid query, not a post-hoc filter on generic search results.
+**Current implementation details:**
+
+- Dense vectors are 384-dimensional, generated deterministically from document IDs via SHA-256 hash. They are not semantically meaningful — the architecture supports real embeddings, but no embedding provider is wired yet.
+- Sparse vectors are word-count bags derived by splitting the query on whitespace. Not BM25 — functional for the demo scenario, but not production retrieval quality.
+- Filtering is first-class. Every search accepts `entity_ids` and `source_types` parameters that become Qdrant `Filter` conditions on payload metadata.
 
 The hybrid approach exists because this domain has retrieval needs that no single strategy covers:
+
 - Exact keyword retrieval for device IDs, version numbers, error codes
 - Semantic retrieval for runbooks, historical incident descriptions, and natural-language documentation
 - Entity-filtered retrieval for scoped investigation within the entity graph
@@ -74,7 +98,7 @@ The engine classifies every investigation into one of five action categories:
 | COMMUNICATE | Safe to generate customer-facing output | All investigate tools + draft_customer_response |
 | EXECUTE | Would take autonomous action | Always blocked in v1 |
 
-Classification depends on severity, customer sensitivity, and evidence confidence. Low-confidence investigations get restricted outputs. High-severity customer-facing incidents force escalation. VIP/enterprise accounts get tighter gating.
+Classification depends on severity, customer sensitivity, and evidence confidence. Low-confidence investigations get restricted outputs. High-severity customer-facing incidents force escalation. Enterprise-tier accounts are treated as VIP sensitivity.
 
 Additional rules:
 - Evidence confidence below 0.3 blocks recommendation and customer response generation
@@ -88,7 +112,7 @@ Every investigation phase emits a span to Langfuse. The trace captures:
 - Evidence retrieved (source type, entity, relevance score)
 - Hypotheses generated (description, confidence, evidence references)
 - Governance decision (classification, approved/blocked actions, escalation status)
-- LLM prompts and responses
+- LLM prompts and responses (when LLM is configured)
 - Token usage and latency
 
 Langfuse runs as a local service (port 3000) backed by Postgres, ClickHouse for analytics, and Redis for job processing. This gives you a full local observability stack without sending data to external services.
@@ -124,7 +148,7 @@ A concrete walkthrough of what happens when you `POST /api/v1/investigations` wi
 
 **Phase 1: Signal Ingestion.** The orchestrator receives a `SignalIds` object containing `ticket_id: "TCK-1001"`, `alert_id: "ALT-2001"`, and `event_id: "EVT-3001"`. These are validated and stored as the signal set for this investigation.
 
-**Phase 2: Entity Resolution.** The system resolves which entities these signals relate to. For the seeded demo data, this produces an `EntityContext` containing: Account "Meridian Logistics" (enterprise tier), Site "Portland Distribution Center", Fleet "Warehouse Alpha Fleet", three Devices (DEV-401 in error state, DEV-402 and DEV-403 in degraded state, all on software v3.3.0), an in-progress Deployment (DEPL-501, v3.3.0), and SoftwareRevision SWREV-302.
+**Phase 2: Entity Resolution.** The system resolves which entities these signals relate to. For the seeded demo data, this produces an `EntityContext` containing: Account "Meridian Logistics" (enterprise tier), Site "Portland Distribution Center", Fleet "Warehouse Alpha Fleet" (FLT-101), three Devices (DEV-401 in error state, DEV-402 and DEV-403 in degraded state, all on software v3.3.0), an in-progress Deployment (DEPL-501, v3.3.0), and SoftwareRevision SWREV-302.
 
 **Phase 3: Evidence Retrieval.** The system queries Qdrant with a hybrid search. The query combines the signal context ("navigation error device blocked anomaly alert") with entity ID filters (ACC-1001, FLT-101, DEV-401, DEV-402, DEV-403). Up to 15 evidence items are returned, each with source type, entity reference, content, and relevance score.
 
@@ -154,7 +178,7 @@ Pre-provisioned Grafana dashboards at `localhost:3100` visualize operational met
 
 ### Why hybrid retrieval, not semantic-only?
 
-Pure semantic search misses exact matches on device IDs, version numbers, and error codes. Pure keyword search misses conceptually related runbooks and historical incidents described in different terms. Reciprocal rank fusion over dense + sparse vectors handles both. Qdrant supports this natively with prefetch and fusion, so the implementation is clean.
+Pure semantic search misses exact matches on device IDs, version numbers, and error codes. Pure keyword search misses conceptually related runbooks and historical incidents described in different terms. Reciprocal rank fusion over dense + sparse vectors handles both. Qdrant supports this natively with prefetch and fusion, so the implementation is clean. The current limitation is that dense vectors are deterministic hashes rather than real embeddings — the architecture is ready for an embedding provider, but one is not wired yet.
 
 ### Why fixed phases, not dynamic agent planning?
 
@@ -171,7 +195,3 @@ Following the guidance from Anthropic and OpenAI on production agent patterns: m
 ### Why entity-centric, not ticket-centric?
 
 Tickets are one signal type among many. An incident might surface first as a telemetry anomaly, then as a customer ticket, then as a deployment event. Centering on entities (Account, Site, Fleet, Device) rather than tickets means the system can reason about what is affected regardless of which signal triggered the investigation. This is the same direction the market is moving: entity graphs, not ticket queues.
-
-### Why Rust CLI alongside Python engine?
-
-The Rust CLI (`praxis`) was built first. It handles AI workflow observability: ingesting logs from OpenCode and Claude Code into DuckDB, calculating costs via the LiteLLM pricing database, and providing analytics on AI usage patterns. It is a standalone tool that runs independently. The Python engine is the investigation platform. They serve different purposes, run on different stacks, and don't share a runtime. Keeping them separate means each can evolve at its own pace.

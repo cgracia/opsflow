@@ -25,7 +25,7 @@ Before you begin, ensure you have:
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/carlos/opsflow.git
+   git clone https://github.com/cgracia/opsflow.git
    cd opsflow
    ```
 
@@ -120,28 +120,42 @@ curl -sf -X POST http://localhost:8000/api/v1/investigations \
   -d '{"signal_ids": {"ticket_id": "TCK-1001", "alert_id": "ALT-2001", "event_id": "EVT-3001"}}'
 ```
 
-Expected response snippet:
+Expected response (abbreviated — full response includes evidence items, specialist reports, and complete briefing text):
 
 ```json
 {
-  "investigation_id": "INV-1001",
-  "trace_id": "trace-abc123",
+  "investigation_id": "INV-a1b2c3d4",
+  "trace_id": "trace-e5f6a7b8c9d0",
   "entity_context": {
-    "account": null,
-    "site": null,
-    "fleet": null,
-    "devices": [],
-    "deployment": null,
-    "software_revision": null
+    "account": {"id": "ACC-1001", "name": "Meridian Logistics", "tier": "enterprise"},
+    "site": {"id": "SITE-2001", "name": "Portland Distribution Center"},
+    "fleet": {"id": "FLT-101", "name": "Warehouse Alpha Fleet"},
+    "devices": [
+      {"id": "DEV-401", "status": "error", "software": "v3.3.0"},
+      {"id": "DEV-402", "status": "degraded", "software": "v3.3.0"},
+      {"id": "DEV-403", "status": "degraded", "software": "v3.3.0"}
+    ],
+    "deployment": {"id": "DEPL-501", "status": "in_progress", "version": "v3.3.0"},
+    "software_revision": {"id": "SWREV-302", "version": "v3.3.0"}
   },
-  "evidence": [],
-  "telemetry_analysis": null,
-  "historical_analysis": null,
-  "hypotheses": [],
-  "governance_decision": null,
-  "operator_briefing": "",
-  "customer_response_draft": "",
-  "created_at": "2026-05-06T10:00:00Z"
+  "evidence": ["... 11 items from Qdrant ..."],
+  "hypotheses": [
+    {
+      "id": "H-1",
+      "description": "Software version v3.3.0 introduced a regression in the navigation engine causing path planning failures across affected devices",
+      "confidence": 0.85,
+      "severity": "high",
+      "is_primary": true
+    }
+  ],
+  "governance_decision": {
+    "action_classification": "ESCALATE",
+    "escalation_required": true,
+    "blocked_actions": ["EXECUTE"]
+  },
+  "operator_briefing": "INVESTIGATION BRIEFING ...",
+  "customer_response_draft": "Dear Meridian Logistics Team ...",
+  "created_at": "2026-05-06T14:00:00Z"
 }
 ```
 
@@ -237,7 +251,7 @@ docker compose restart api
 ## Next Steps
 
 - Read the [Investigation Flow](../README.md#investigation-flow) to understand how investigations work
-- Explore the [Demo Walkthrough](./demo-walkthrough.md) for a narrative example
+- Explore the [Demo Scenario](./demo-scenario.md) for a narrative example
 - Review the [API Documentation](http://localhost:8000/docs) for available endpoints
 
 ## Support
