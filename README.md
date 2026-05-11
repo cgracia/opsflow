@@ -55,7 +55,9 @@ Today's connectors are stubs against synthetic data. The entity model, retrieval
 
 Architecture diagrams are maintained as a LikeC4 model in [docs/architecture](docs/architecture/README.md).
 
-The model covers the system context, container view, seven-phase investigation flow, and observability stack. Once GitHub Pages is enabled for this repository, the interactive architecture site will be published at:
+![OpsFlow investigation flow](docs/architecture/assets/investigation-flow.png)
+
+The model covers the system context, container view, seven-phase investigation flow, and observability stack. The interactive architecture site is published at:
 
 https://cgracia.github.io/opsflow/
 
