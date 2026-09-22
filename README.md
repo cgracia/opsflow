@@ -1,35 +1,42 @@
 # OpsFlow
 
-**AI-native incident investigation layer for fragmented technical operations.**
+**An incident investigation layer that converges signals from several sources into one governed investigation over an entity graph.**
 
-> **Status:** Personal open-source alpha. Synthetic data only. Not for production use.
+> **Status:** personal open-source alpha. Runs today on synthetic data. Being pointed at a real self-hosted service estate — see [where this is going](#where-this-is-going). Not for production use.
 
 ## Why this exists
 
-Information during incidents is scattered across tickets, docs, telemetry, alerts, code, and chat. Humans stitch it together manually under time pressure, often missing connections between signals that point at the same underlying problem.
+During an incident, the information needed to understand it is scattered across alerts, uptime checks, deployment history, telemetry, runbooks and past tickets. A human stitches those together manually, under time pressure, and the connection that matters — this started six minutes after that rollout — is often the one nobody makes in time.
 
-OpsFlow is an exploration of whether AI can reconstruct that context — investigate, synthesize, recommend, draft — while humans stay in control of execution. It runs a structured 7-phase pipeline that converges multiple signals into a single investigation, reasons across an entity hierarchy, and produces bounded outputs with full traceability.
+OpsFlow reconstructs that context. It runs a fixed seven-phase pipeline that converges multiple signals into a single investigation, resolves them against an entity hierarchy, retrieves evidence, consults specialist investigators, and produces bounded outputs with a full trace of how it got there. Humans stay in control of execution: the system investigates and recommends, it does not act.
 
 ## What this is / is not
 
 **Is:**
 
-- An investigation layer that connects to existing systems (tickets, alerts, telemetry, code, docs)
-- A structured 7-phase pipeline with typed inputs and outputs at every stage
-- A governance-bounded reasoning system — EXECUTE actions are blocked in v1
-- A personal open-source exploration, built on personal time with personal tools
-- Fully synthetic — all incidents, entities, and evidence are invented for demonstration
+- An investigation layer that sits on top of existing tools rather than replacing them
+- A structured seven-phase pipeline with typed inputs and outputs at every stage
+- A governance-bounded reasoning system — EXECUTE actions are blocked
+- A personal open-source project, built on personal time with personal infrastructure
 
 **Is not:**
 
-- A platform replacement — it sits on top of existing tools, it does not replace them
-- A production system — no security review, no real data handling, no SLA guarantees
-- An autonomous remediation tool — humans decide and execute, the system investigates and recommends
+- A platform replacement
+- A production system — no security review, no real data handling, no SLA
+- An autonomous remediation tool
 - Built from any company's real data, workflows, or operational patterns
+
+## Where this is going
+
+The v1 pipeline is architecturally complete and empirically hollow. It runs end to end, but over invented data, with several components simulated — see [what is simulated](#what-is-simulated-or-stubbed) below. Every one of those simulations is a consequence of having no real signal source, not of a design flaw.
+
+So the current work points the same architecture at a real self-hosted estate of around twenty containerised services, and migrates the workload onto a k3s cluster provisioned with Terraform. That estate supplies real versions of every signal the architecture already models — including the one that was hardest to fake convincingly, deployment adjacency, because every image is pinned by digest and every deployment is a git commit.
+
+The plan is in [`.sisyphus/plans/opsflow-homelab.md`](.sisyphus/plans/opsflow-homelab.md).
 
 ## What works today
 
-- 7-phase investigation pipeline runs end-to-end on synthetic seed data: signal ingestion, entity resolution, evidence retrieval, specialist investigation, hypothesis generation, governance evaluation, output generation
+- Seven-phase investigation pipeline runs end-to-end: signal ingestion, entity resolution, evidence retrieval, specialist investigation, hypothesis generation, governance evaluation, output generation
 - Entity model with 10 types: Account, Site, Fleet, Device, Service, Deployment, SoftwareRevision, Incident, Ticket, OperationalEvent
 - Governance engine classifies actions into 5 categories (INVESTIGATE, RECOMMEND, ESCALATE, COMMUNICATE, EXECUTE), blocks EXECUTE in v1, gates by severity/confidence/sensitivity
 - Langfuse trace emission for every investigation phase — prompts, evidence, hypotheses, governance decisions are all inspectable
@@ -43,7 +50,7 @@ OpsFlow is an exploration of whether AI can reconstruct that context — investi
 - **Sparse vectors are word-count bags, not BM25.** Keyword search splits the query on whitespace and counts occurrences. Functional for the demo scenario, but not production retrieval quality.
 - **Entity resolution is demo-shaped.** The seed data has one account, one site, one fleet, one incident scenario. Resolution logic works for this case but has not been tested across ambiguous or overlapping entity graphs.
 - **Specialist analysis is rule-based.** Both investigators match keywords in evidence content (e.g., "navigation_error_rate", "sensor_fusion_latency"). LLM-enhanced analysis is supported but optional — the system defaults to rule-based logic.
-- **All evidence is synthetic.** The 11 evidence documents (historical tickets, runbooks, telemetry snapshots, deployment manifests) are invented for the Meridian Logistics demo scenario. No real operational data enters the system.
+- **All evidence is synthetic.** The 11 evidence documents (historical tickets, runbooks, telemetry snapshots, deployment manifests) are invented. They exist as a fixture to exercise the pipeline, not as a demonstration of a domain. No real operational data enters the system.
 
 ## Connect rather than replace
 
@@ -85,7 +92,7 @@ curl -sf -X POST http://localhost:8000/api/v1/investigations \
 
 Ports: API at `:8000`, Qdrant at `:6333`, Langfuse at `:3000`, Grafana at `:3100`, Postgres at `:5432`.
 
-The investigation endpoint returns a full `InvestigationResponse` including entity context, evidence retrieved, specialist reports, hypotheses, governance decision, and two output drafts (operator briefing and customer response). All data is synthetic — see [demo scenario](docs/demo-scenario.md) for expected output.
+The IDs above address a synthetic fixture scenario, which is currently the only way to exercise the pipeline. The endpoint returns a full `InvestigationResponse`: entity context, evidence retrieved, specialist reports, hypotheses, governance decision, and two output drafts. See [the fixture scenario](docs/demo-scenario.md) for expected output.
 
 ## Investigation flow
 
@@ -113,11 +120,14 @@ Every investigation follows seven fixed phases, executed in order:
 | Dashboards | Grafana |
 | Runtime | Docker Compose |
 
-## Status
+## Repository layout
 
-Alpha. In active development. Not for production use.
+`python/` is the engine and the whole of the project. A Rust CLI that shared this
+repository until September 2026 was extracted to its own repository, `praxis`,
+with its history intact; it solved an unrelated problem.
 
-The investigation pipeline runs end-to-end with synthetic data. The entity model covers ten types. Two specialist tools are operational. Governance gates EXECUTE actions. What comes next: real embedding integration, connectors to actual signal sources, evaluation harnesses, and cross-incident learning.
+`AGENTS.md` is the canonical reference for anyone — human or agent — working in
+this repository.
 
 ## License
 
