@@ -3,9 +3,9 @@ Evidence data for Qdrant indexing.
 These are the documents that will be vectorized and searchable.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-NOW = datetime(2026, 5, 6, 14, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 6, 14, 0, 0, tzinfo=UTC)
 THREE_MONTHS_AGO = NOW - timedelta(days=90)
 T_MINUS_2H = NOW - timedelta(hours=2)
 
@@ -18,7 +18,8 @@ def get_historical_tickets() -> list[dict]:
             "entity_id": "ACC-1001",
             "entity_type": "account",
             "source_type": "historical_ticket",
-            "content": "Navigation path planning failures after v3.1.2 update on Warehouse Alpha fleet. "
+            "content": "Navigation path planning failures after v3.1.2 update on Warehouse Alpha "
+            "fleet. "
             "Symptoms: devices reporting NAV_PATH_PLAN_FAILED error. Resolution: rollback to "
             "v3.1.1 and patch navigation config. Root cause: sensor fusion timeout parameter "
             "too aggressive for warehouse environments with metal shelving.",
@@ -30,7 +31,8 @@ def get_historical_tickets() -> list[dict]:
             "entity_id": "ACC-1001",
             "entity_type": "account",
             "source_type": "historical_ticket",
-            "content": "Intermittent navigation errors on DEV-401 and DEV-402. Devices losing position "
+            "content": "Intermittent navigation errors on DEV-401 and DEV-402. Devices losing "
+            "position "
             "estimation in high-traffic warehouse corridors. Related to sensor fusion latency.",
             "timestamp": (THREE_MONTHS_AGO + timedelta(days=7)).isoformat(),
             "metadata": {"devices": ["DEV-401", "DEV-402"]},
@@ -40,7 +42,8 @@ def get_historical_tickets() -> list[dict]:
             "entity_id": "ACC-1001",
             "entity_type": "account",
             "source_type": "historical_ticket",
-            "content": "Fleet-wide navigation degradation reported after software update. Error rate "
+            "content": "Fleet-wide navigation degradation reported after software update. Error "
+            "rate "
             "spike from baseline 0.2% to 15%. Affected 4 of 8 devices. Rollback resolved.",
             "timestamp": (THREE_MONTHS_AGO + timedelta(days=14)).isoformat(),
             "metadata": {"pattern": "post_update_navigation_failure"},
@@ -50,7 +53,8 @@ def get_historical_tickets() -> list[dict]:
             "entity_id": "FLT-101",
             "entity_type": "fleet",
             "source_type": "historical_ticket",
-            "content": "Path planning module crash when encountering unexpected obstacles near loading "
+            "content": "Path planning module crash when encountering unexpected obstacles near "
+            "loading "
             "docks. Workaround: increased obstacle detection radius. Permanent fix in v3.2.0.",
             "timestamp": (THREE_MONTHS_AGO + timedelta(days=30)).isoformat(),
             "metadata": {"area": "loading_docks"},
@@ -60,7 +64,8 @@ def get_historical_tickets() -> list[dict]:
             "entity_id": "ACC-1001",
             "entity_type": "account",
             "source_type": "historical_ticket",
-            "content": "Customer reported shipment delays due to device navigation issues at Portland DC. "
+            "content": "Customer reported shipment delays due to device navigation issues at "
+            "Portland DC. "
             "SLA impact: 3 missed delivery windows. Root cause: navigation stack memory leak "
             "causing gradual degradation over 48-hour uptime.",
             "timestamp": (THREE_MONTHS_AGO + timedelta(days=45)).isoformat(),

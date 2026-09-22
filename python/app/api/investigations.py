@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.orchestrator.investigation import InvestigationManager
+from app.retrieval.client import QdrantManager
 from app.schemas.investigation import (
     InvestigationRequest,
     InvestigationResponse,
     SeedResult,
     SignalIds,
 )
-from app.orchestrator.investigation import InvestigationManager
-from app.retrieval.client import QdrantManager
 from app.tracing.langfuse import create_tracer
 
 router = APIRouter(tags=["investigations"])
@@ -65,8 +64,8 @@ async def seed_data(
     qdrant: QdrantManager = Depends(get_qdrant_manager),
 ) -> SeedResult:
     """Seed Postgres with synthetic entity data and index evidence into Qdrant."""
-    from app.seed.entities import seed_all
     from app.retrieval.indexer import index_all_evidence
+    from app.seed.entities import seed_all
 
     entity_map = await seed_all(db)
 

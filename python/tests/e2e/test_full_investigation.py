@@ -37,7 +37,9 @@ def _meridian_evidence():
             "entity_id": "FLT-101",
             "entity_type": "fleet",
             "source_type": "runbook",
-            "content": "Runbook: Navigation Troubleshooting. If post-deployment, consider rollback.",
+            "content": (
+                "Runbook: Navigation Troubleshooting. If post-deployment, consider rollback."
+            ),
             "score": 0.82,
         },
         {

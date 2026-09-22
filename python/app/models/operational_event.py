@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.account import Account
+    from app.models.device import Device
+    from app.models.fleet import Fleet
+    from app.models.site import Site
 
 
 class OperationalEvent(Base, TimestampMixin):
@@ -26,7 +33,7 @@ class OperationalEvent(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     event_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    device: Mapped["Device | None"] = relationship(back_populates="operational_events")
-    fleet: Mapped["Fleet | None"] = relationship(back_populates="operational_events")
-    site: Mapped["Site | None"] = relationship(back_populates="operational_events")
-    account: Mapped["Account | None"] = relationship()
+    device: Mapped[Device | None] = relationship(back_populates="operational_events")
+    fleet: Mapped[Fleet | None] = relationship(back_populates="operational_events")
+    site: Mapped[Site | None] = relationship(back_populates="operational_events")
+    account: Mapped[Account | None] = relationship()

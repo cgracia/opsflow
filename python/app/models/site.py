@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.account import Account
+    from app.models.fleet import Fleet
+    from app.models.operational_event import OperationalEvent
+    from app.models.ticket import Ticket
 
 
 class Site(Base, TimestampMixin):
@@ -14,9 +22,7 @@ class Site(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     location: Mapped[str] = mapped_column(String(200), nullable=True)
     timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="UTC")
-    account: Mapped["Account"] = relationship(back_populates="sites")
-    fleets: Mapped[list["Fleet"]] = relationship(
-        back_populates="site", cascade="all, delete-orphan"
-    )
-    tickets: Mapped[list["Ticket"]] = relationship(back_populates="site")
-    operational_events: Mapped[list["OperationalEvent"]] = relationship(back_populates="site")
+    account: Mapped[Account] = relationship(back_populates="sites")
+    fleets: Mapped[list[Fleet]] = relationship(back_populates="site", cascade="all, delete-orphan")
+    tickets: Mapped[list[Ticket]] = relationship(back_populates="site")
+    operational_events: Mapped[list[OperationalEvent]] = relationship(back_populates="site")

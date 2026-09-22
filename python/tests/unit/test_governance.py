@@ -1,7 +1,6 @@
-import pytest
-
 from app.governance.classification import (
-    ActionCategory, SeverityLevel, CustomerSensitivity, classify_action,
+    ActionCategory,
+    classify_action,
 )
 from app.governance.engine import GovernanceEngine
 
@@ -44,9 +43,7 @@ class TestGovernanceEngine:
         assert "execute" in decision.blocked_actions
 
     def test_low_severity_internal_no_escalation(self):
-        decision = self.engine.evaluate(
-            severity="low", customer_sensitivity="internal_only"
-        )
+        decision = self.engine.evaluate(severity="low", customer_sensitivity="internal_only")
         assert decision.escalation_required is False
         assert decision.action_classification == ActionCategory.INVESTIGATE
 
@@ -54,13 +51,16 @@ class TestGovernanceEngine:
         for sev in ["low", "medium", "high", "critical"]:
             for sens in ["internal_only", "customer_facing", "vip_customer"]:
                 decision = self.engine.evaluate(severity=sev, customer_sensitivity=sens)
-                assert "execute" in decision.blocked_actions, f"EXECUTE not blocked for {sev}/{sens}"
+                assert "execute" in decision.blocked_actions, (
+                    f"EXECUTE not blocked for {sev}/{sens}"
+                )
 
     def test_low_confidence_restricts_output(self):
-        decision = self.engine.evaluate(
-            severity="medium", evidence_confidence=0.1
+        decision = self.engine.evaluate(severity="medium", evidence_confidence=0.1)
+        assert (
+            "draft_recommendation" in decision.blocked_actions
+            or "draft_customer_response" in decision.blocked_actions
         )
-        assert "draft_recommendation" in decision.blocked_actions or "draft_customer_response" in decision.blocked_actions
 
     def test_decision_to_dict(self):
         decision = self.engine.evaluate(severity="high", customer_sensitivity="customer_facing")

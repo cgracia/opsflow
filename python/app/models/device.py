@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.account import Account
+    from app.models.fleet import Fleet
+    from app.models.operational_event import OperationalEvent
+    from app.models.site import Site
+    from app.models.software_revision import SoftwareRevision
+    from app.models.ticket import Ticket
 
 
 class Device(Base, TimestampMixin):
@@ -22,9 +31,9 @@ class Device(Base, TimestampMixin):
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    fleet: Mapped["Fleet"] = relationship(back_populates="devices")
-    site: Mapped["Site"] = relationship()
-    account: Mapped["Account"] = relationship()
-    software_revision: Mapped["SoftwareRevision | None"] = relationship()
-    tickets: Mapped[list["Ticket"]] = relationship(back_populates="device")
-    operational_events: Mapped[list["OperationalEvent"]] = relationship(back_populates="device")
+    fleet: Mapped[Fleet] = relationship(back_populates="devices")
+    site: Mapped[Site] = relationship()
+    account: Mapped[Account] = relationship()
+    software_revision: Mapped[SoftwareRevision | None] = relationship()
+    tickets: Mapped[list[Ticket]] = relationship(back_populates="device")
+    operational_events: Mapped[list[OperationalEvent]] = relationship(back_populates="device")

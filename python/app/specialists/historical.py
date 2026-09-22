@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
 
-from app.schemas.investigation import HistoricalReport
 from app.retrieval.client import QdrantManager
 from app.retrieval.search import search_evidence
+from app.schemas.investigation import HistoricalReport
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +84,13 @@ class HistoricalInvestigator:
             )
 
             # Pattern detection
-            if "navigation" in content and ("error" in content or "failure" in content):
-                if "post_update" not in content and "rollback" in content:
-                    recurring_patterns.append("Post-update navigation failure requiring rollback")
+            if (
+                "navigation" in content
+                and ("error" in content or "failure" in content)
+                and "post_update" not in content
+                and "rollback" in content
+            ):
+                recurring_patterns.append("Post-update navigation failure requiring rollback")
 
             if "sensor fusion" in content or "latency" in content:
                 recurring_patterns.append("Sensor fusion latency issues recurring")

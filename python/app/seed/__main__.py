@@ -25,9 +25,8 @@ async def _seed(db_url: str) -> dict:
 
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    async with session_factory() as session:
-        async with session.begin():
-            entities = await seed_database(session)
+    async with session_factory() as session, session.begin():
+        entities = await seed_database(session)
 
     counts = {}
     for category, items in entities.items():

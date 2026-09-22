@@ -8,8 +8,8 @@ TELEMETRY_ANALYSIS = {
         "2. Correlate anomalies with timing of changes\n"
         "3. Assess confidence level (0.0-1.0)\n"
         "4. List specific evidence references\n\n"
-        "Respond with JSON: {\"findings\": [...], \"anomalies\": [...], "
-        "\"event_timeline\": [...], \"confidence\": 0.0-1.0, \"evidence_refs\": [...]}"
+        'Respond with JSON: {"findings": [...], "anomalies": [...], '
+        '"event_timeline": [...], "confidence": 0.0-1.0, "evidence_refs": [...]}'
     ),
     "user": (
         "Analyze telemetry for {device_id} in fleet {fleet_id}.\n"
@@ -28,9 +28,9 @@ HISTORICAL_PATTERN_RECOGNITION = {
         "3. Check for deployment adjacency (did issues start after software changes?)\n"
         "4. Retrieve relevant runbooks or known issues\n"
         "5. Assess confidence level (0.0-1.0)\n\n"
-        "Respond with JSON: {\"similar_incidents\": [...], \"recurring_patterns\": [...], "
-        "\"deployment_adjacency\": [...], \"known_issues\": [...], \"confidence\": 0.0-1.0, "
-        "\"evidence_refs\": [...]}"
+        'Respond with JSON: {"similar_incidents": [...], "recurring_patterns": [...], '
+        '"deployment_adjacency": [...], "known_issues": [...], "confidence": 0.0-1.0, '
+        '"evidence_refs": [...]}'
     ),
     "user": (
         "Analyze historical patterns for entities: {entity_ids}\n"
@@ -51,8 +51,8 @@ HYPOTHESIS_GENERATION = {
         "4. Severity assessment\n"
         "5. Whether this is the primary hypothesis\n\n"
         "Rank hypotheses by confidence (highest first).\n\n"
-        "Respond with JSON: {\"hypotheses\": [{\"id\": \"\", \"description\": \"\", "
-        "\"confidence\": 0.0, \"evidence_ids\": [], \"severity\": \"\", \"is_primary\": bool}]}"
+        'Respond with JSON: {"hypotheses": [{"id": "", "description": "", '
+        '"confidence": 0.0, "evidence_ids": [], "severity": "", "is_primary": bool}]}'
     ),
     "user": (
         "Generate hypotheses for incident involving: {entity_context}\n\n"
@@ -74,8 +74,8 @@ GOVERNANCE_CLASSIFICATION = {
         "- EXECUTE: Automated action (ALWAYS blocked in v1)\n\n"
         "Severity: LOW, MEDIUM, HIGH, CRITICAL\n"
         "Customer sensitivity: internal_only, customer_facing, vip_customer\n\n"
-        "Respond with JSON: {\"action\": \"\", \"severity\": \"\", "
-        "\"customer_sensitivity\": \"\", \"reasoning\": \"\"}"
+        'Respond with JSON: {"action": "", "severity": "", '
+        '"customer_sensitivity": "", "reasoning": ""}'
     ),
     "user": (
         "Classify this incident:\n"

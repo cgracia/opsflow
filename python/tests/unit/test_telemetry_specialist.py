@@ -1,10 +1,11 @@
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timezone
 
 import app.specialists.telemetry as telemetry_mod
-from app.specialists.telemetry import TelemetryInvestigator
 from app.schemas.investigation import TelemetryReport
+from app.specialists.telemetry import TelemetryInvestigator
 
 
 def _make_qdrant_with_results(results: list[dict]) -> MagicMock:
@@ -46,8 +47,8 @@ async def test_identifies_navigation_error_spike():
             device_id="DEV-401",
             fleet_id="FLT-101",
             time_window=(
-                datetime(2026, 5, 6, 10, 0, tzinfo=timezone.utc),
-                datetime(2026, 5, 6, 14, 0, tzinfo=timezone.utc),
+                datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
+                datetime(2026, 5, 6, 14, 0, tzinfo=UTC),
             ),
         )
 

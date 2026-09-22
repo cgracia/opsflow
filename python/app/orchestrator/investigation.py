@@ -1,37 +1,36 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from app.schemas.investigation import (
-    SignalIds,
-    InvestigationResponse,
-    EntityContext,
-    EvidenceItem,
-    Hypothesis,
-    TelemetryReport,
-    HistoricalReport,
-    GovernanceDecision,
-)
-from app.orchestrator.phases import InvestigationPhase
-from app.retrieval.client import QdrantManager
-from app.retrieval.search import search_evidence
-from app.specialists.telemetry import TelemetryInvestigator
-from app.specialists.historical import HistoricalInvestigator
 from app.governance.engine import GovernanceEngine
 from app.llm.client import LLMClient
 from app.llm.prompts import HYPOTHESIS_GENERATION
+from app.orchestrator.phases import InvestigationPhase
+from app.retrieval.client import QdrantManager
+from app.retrieval.search import search_evidence
+from app.schemas.investigation import (
+    EntityContext,
+    EvidenceItem,
+    GovernanceDecision,
+    HistoricalReport,
+    Hypothesis,
+    InvestigationResponse,
+    SignalIds,
+    TelemetryReport,
+)
+from app.specialists.historical import HistoricalInvestigator
+from app.specialists.telemetry import TelemetryInvestigator
 from app.tracing.langfuse import LangfuseTracer
 from app.tracing.spans import (
-    TELEMETRY_SPECIALIST,
+    GOVERNANCE_EVALUATE,
     HISTORICAL_SPECIALIST,
-    RETRIEVAL_HYBRID,
+    LLM_CUSTOMER_RESPONSE,
     LLM_HYPOTHESIS_GENERATION,
     LLM_OPERATOR_BRIEFING,
-    LLM_CUSTOMER_RESPONSE,
-    GOVERNANCE_EVALUATE,
+    RETRIEVAL_HYBRID,
+    TELEMETRY_SPECIALIST,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +144,7 @@ class InvestigationManager:
             governance_decision=governance,
             operator_briefing=operator_briefing,
             customer_response_draft=customer_response,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
     def _ingest_signals(self, signal_ids: SignalIds) -> dict:
@@ -295,7 +294,8 @@ class InvestigationManager:
             hypotheses.append(
                 Hypothesis(
                     id="H-1",
-                    description=f"Software version {version} introduced a regression in the navigation engine causing path planning failures across affected devices",
+                    description=f"Software version {version} introduced a regression in the "
+                    f"navigation engine causing path planning failures across affected devices",
                     confidence=0.85,
                     evidence_ids=[e.source_id for e in evidence[:3]]
                     + telemetry.evidence_references[:2],
@@ -308,7 +308,8 @@ class InvestigationManager:
             hypotheses.append(
                 Hypothesis(
                     id="H-2",
-                    description=f"Recurring sensor fusion/navigation issue pattern — {len(historical.recurring_patterns)} similar past incidents detected",
+                    description=f"Recurring sensor fusion/navigation issue pattern — "
+                    f"{len(historical.recurring_patterns)} similar past incidents detected",
                     confidence=0.65,
                     evidence_ids=historical.evidence_references[:2],
                     severity="medium",
@@ -320,7 +321,8 @@ class InvestigationManager:
             hypotheses.append(
                 Hypothesis(
                     id="H-1",
-                    description="Insufficient evidence for confident hypothesis — further investigation required",
+                    description="Insufficient evidence for confident hypothesis — further "
+                    "investigation required",
                     confidence=0.2,
                     evidence_ids=[],
                     severity="low",
@@ -425,7 +427,8 @@ class InvestigationManager:
             f"Dear {account_name} Team,\n\n"
             "We are aware of the issue affecting your devices at the Portland Distribution Center. "
             "Our team has identified the root cause and is actively working on a resolution.\n\n"
-            "What we know: A recent software update has caused unexpected behavior in a subset of your devices. "
+            "What we know: A recent software update has caused unexpected behavior in a subset of "
+            "your devices. "
             "We have halted the update and are preparing a fix.\n\n"
             f"Current status: {len(entity_context.devices)} devices are impacted. "
             "Your remaining devices continue to operate normally.\n\n"

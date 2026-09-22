@@ -1,15 +1,15 @@
 import uuid
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from app.config import Settings
+from app.orchestrator.investigation import InvestigationManager
+from app.schemas.investigation import HistoricalReport, SignalIds, TelemetryReport
 from app.tracing import LangfuseTracer, create_tracer
 from app.tracing.spans import (
     PHASE_SPANS,
 )
-from app.orchestrator.investigation import InvestigationManager
-from app.schemas.investigation import SignalIds, TelemetryReport, HistoricalReport
 
 
 def _mock_langfuse_client():
@@ -33,7 +33,7 @@ def _make_tracer() -> tuple[LangfuseTracer, MagicMock]:
 
 
 def test_tracer_creates_root_trace():
-    tracer, trace_obj = _make_tracer()
+    tracer, _trace_obj = _make_tracer()
 
     trace_id = tracer.create_trace(name="test-investigation")
 
@@ -73,7 +73,7 @@ def test_tracer_handles_missing_config():
 
 
 def test_tracer_attach_evidence_metadata():
-    tracer, trace_obj = _make_tracer()
+    tracer, _trace_obj = _make_tracer()
     trace_id = tracer.create_trace(name="evidence-test")
     span = tracer.create_span(trace_id=trace_id, name="evidence_phase")
 
@@ -141,7 +141,7 @@ def test_end_span_unknown_id_is_noop():
 
 @pytest.mark.asyncio
 async def test_investigation_with_tracing():
-    client, trace_obj, span_obj = _mock_langfuse_client()
+    client, trace_obj, _span_obj = _mock_langfuse_client()
     tracer = LangfuseTracer(client=client)
 
     qdrant = MagicMock()
@@ -209,12 +209,12 @@ def test_span_constants_match_phases():
         "governance_evaluation",
         "output_generation",
     ]
-    assert PHASE_SPANS == expected
+    assert expected == PHASE_SPANS
 
 
 @pytest.mark.asyncio
 async def test_phase_spans_are_started_and_ended():
-    client, trace_obj, _ = _mock_langfuse_client()
+    client, _trace_obj, _ = _mock_langfuse_client()
     tracer = LangfuseTracer(client=client)
 
     qdrant = MagicMock()

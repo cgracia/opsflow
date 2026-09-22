@@ -1,7 +1,8 @@
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from app.retrieval.client import QdrantManager, COLLECTION_NAME, VECTOR_SIZE
+import pytest
+
+from app.retrieval.client import COLLECTION_NAME, VECTOR_SIZE, QdrantManager
 
 
 class TestQdrantManager:
@@ -66,8 +67,13 @@ class TestQdrantManager:
         manager._collection_ready = True
 
         docs = [
-            {"id": f"doc-{i}", "entity_id": "DEV-401", "entity_type": "device",
-             "source_type": "ticket", "content": f"content {i}"}
+            {
+                "id": f"doc-{i}",
+                "entity_id": "DEV-401",
+                "entity_type": "device",
+                "source_type": "ticket",
+                "content": f"content {i}",
+            }
             for i in range(3)
         ]
 

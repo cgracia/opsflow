@@ -1,9 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from app.orchestrator.investigation import InvestigationManager
-from app.orchestrator.phases import InvestigationPhase, PHASE_ORDER
-from app.schemas.investigation import SignalIds, TelemetryReport, HistoricalReport, EntityContext
+from app.orchestrator.phases import PHASE_ORDER, InvestigationPhase
+from app.schemas.investigation import HistoricalReport, SignalIds, TelemetryReport
 
 
 def _make_manager() -> InvestigationManager:

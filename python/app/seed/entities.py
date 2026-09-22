@@ -9,7 +9,7 @@ recognize they're the same incident.
 All IDs are deterministic for test reproducibility.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +24,8 @@ from app.models.site import Site
 from app.models.software_revision import SoftwareRevision
 from app.models.ticket import Ticket
 
-
 # Reference timestamps (all UTC)
-NOW = datetime(2026, 5, 6, 14, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 6, 14, 0, 0, tzinfo=UTC)
 T_MINUS_2H = NOW - timedelta(hours=2)
 T_MINUS_1H = NOW - timedelta(hours=1)
 T_MINUS_30M = NOW - timedelta(minutes=30)
@@ -63,13 +62,15 @@ async def seed_software_revisions() -> dict:
         "v321": SoftwareRevision(
             id="SWREV-301",
             version="3.2.1",
-            release_notes="Stable release. Navigation stack improvements. Bug fixes for mapping edge cases.",
+            release_notes="Stable release. Navigation stack improvements. Bug fixes for mapping "
+            "edge cases.",
             deployed_at=THREE_MONTHS_AGO - timedelta(days=60),
         ),
         "v330": SoftwareRevision(
             id="SWREV-302",
             version="3.3.0",
-            release_notes="Major update. New navigation engine. Improved path planning. Updated sensor fusion.",
+            release_notes="Major update. New navigation engine. Improved path planning. Updated "
+            "sensor fusion.",
             deployed_at=T_MINUS_2H,
         ),
     }

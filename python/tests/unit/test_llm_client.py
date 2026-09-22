@@ -1,9 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.config import Settings
 from app.llm.client import LLMClient, LLMResponse
-from app.llm.prompts import ALL_PROMPTS, TELEMETRY_ANALYSIS, HYPOTHESIS_GENERATION
+from app.llm.prompts import ALL_PROMPTS
 
 
 def test_llm_response_dataclass():

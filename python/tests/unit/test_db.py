@@ -2,13 +2,14 @@ import os
 
 from sqlalchemy import Column, Integer, String
 
+from app.config import Settings
 from app.db.base import Base, TimestampMixin
 from app.db.session import init_db
-from app.config import Settings
 
 
 class SampleModel(Base, TimestampMixin):
     """Test model to verify base classes work."""
+
     __tablename__ = "sample_test"
 
     id: int = Column(Integer, primary_key=True)
@@ -45,6 +46,7 @@ def test_init_db_creates_engine() -> None:
     init_db(settings)
 
     from app.db import session as session_mod
+
     assert session_mod.async_engine is not None
     assert session_mod.AsyncSessionLocal is not None
 

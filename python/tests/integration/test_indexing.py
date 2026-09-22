@@ -10,9 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.retrieval.client import QdrantManager, COLLECTION_NAME
+from app.retrieval.client import COLLECTION_NAME, QdrantManager
 from app.retrieval.indexer import index_all_evidence
-from app.retrieval.search import search_evidence, search_by_entity
+from app.retrieval.search import search_by_entity, search_evidence
 from app.seed.evidence import get_all_evidence
 
 
@@ -45,7 +45,10 @@ async def test_index_all_evidence_indexes_every_document(manager):
 
 @pytest.mark.asyncio
 async def test_index_all_evidence_covers_all_source_types(manager):
-    """Indexed documents should cover all source types: historical_ticket, runbook, telemetry, deployment."""
+    """Indexed docs should cover every source type.
+
+    historical_ticket, runbook, telemetry, deployment.
+    """
     await index_all_evidence(manager)
 
     points = manager.client.upsert.call_args.kwargs["points"]
@@ -148,7 +151,7 @@ async def test_search_relevance_navigation_error(manager):
 
 @pytest.mark.asyncio
 async def test_search_relevance_runbook_for_navigation(manager):
-    """Runbook RB-001 (Navigation Troubleshooting) should be among top results for navigation queries."""
+    """Runbook RB-001 should rank in the top results for navigation queries."""
     all_docs = get_all_evidence()
 
     nav_runbook = next(d for d in all_docs if d["id"] == "RB-001")

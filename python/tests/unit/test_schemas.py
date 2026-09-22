@@ -1,17 +1,19 @@
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
+from pydantic import ValidationError
 
 from app.schemas.investigation import (
-    SignalIds,
-    InvestigationRequest,
     EntityContext,
-    GovernanceDecision,
-    Hypothesis,
     EvidenceItem,
-    TelemetryReport,
+    GovernanceDecision,
     HistoricalReport,
+    Hypothesis,
+    InvestigationRequest,
     InvestigationResponse,
     SeedResult,
+    SignalIds,
+    TelemetryReport,
 )
 
 
@@ -51,7 +53,7 @@ def test_investigation_request_validates():
     req = InvestigationRequest(signal_ids=SignalIds(ticket_id="T-1"))
     assert req.signal_ids.ticket_id == "T-1"
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         InvestigationRequest()
 
 
@@ -89,7 +91,7 @@ def test_hypothesis_confidence_range():
 
 def test_investigation_response_complete():
     """Full InvestigationResponse with all fields populated."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     resp = InvestigationResponse(
         investigation_id="inv-1",
         trace_id="trace-1",

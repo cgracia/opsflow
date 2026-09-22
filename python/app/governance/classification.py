@@ -1,9 +1,9 @@
-from enum import Enum
+from enum import StrEnum
 
 from app.schemas.investigation import Hypothesis
 
 
-class ActionCategory(str, Enum):
+class ActionCategory(StrEnum):
     INVESTIGATE = "investigate"
     RECOMMEND = "recommend"
     ESCALATE = "escalate"
@@ -11,14 +11,14 @@ class ActionCategory(str, Enum):
     EXECUTE = "execute"
 
 
-class SeverityLevel(str, Enum):
+class SeverityLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
 
-class CustomerSensitivity(str, Enum):
+class CustomerSensitivity(StrEnum):
     INTERNAL_ONLY = "internal_only"
     CUSTOMER_FACING = "customer_facing"
     VIP_CUSTOMER = "vip_customer"
@@ -39,7 +39,10 @@ def classify_action(
         return ActionCategory.ESCALATE
 
     # HIGH + customer-facing escalates
-    if sev == SeverityLevel.HIGH and sens in (CustomerSensitivity.CUSTOMER_FACING, CustomerSensitivity.VIP_CUSTOMER):
+    if sev == SeverityLevel.HIGH and sens in (
+        CustomerSensitivity.CUSTOMER_FACING,
+        CustomerSensitivity.VIP_CUSTOMER,
+    ):
         return ActionCategory.ESCALATE
 
     # HIGH + VIP always escalates

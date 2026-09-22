@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
 
-from app.schemas.investigation import TelemetryReport
 from app.retrieval.client import QdrantManager
 from app.retrieval.search import search_evidence
+from app.schemas.investigation import TelemetryReport
 
 logger = logging.getLogger(__name__)
 

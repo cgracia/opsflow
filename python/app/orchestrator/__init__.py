@@ -1,4 +1,4 @@
-from app.orchestrator.phases import InvestigationPhase
 from app.orchestrator.investigation import InvestigationManager
+from app.orchestrator.phases import InvestigationPhase
 
-__all__ = ["InvestigationPhase", "InvestigationManager"]
+__all__ = ["InvestigationManager", "InvestigationPhase"]

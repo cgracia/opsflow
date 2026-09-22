@@ -1,20 +1,7 @@
-import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.base import Base
-from app.models import (
-    Account,
-    Deployment,
-    Device,
-    Fleet,
-    Incident,
-    OperationalEvent,
-    Service,
-    Site,
-    SoftwareRevision,
-    Ticket,
-)
 from app.seed.entities import seed_all
 from app.seed.evidence import (
     get_all_evidence,
@@ -32,9 +19,8 @@ async def db_session():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_factory() as session:
-        async with session.begin():
-            yield session
+    async with session_factory() as session, session.begin():
+        yield session
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
@@ -67,7 +53,7 @@ async def test_ids_are_deterministic(db_session: AsyncSession):
     ids2 = {k: sorted(e.id for e in v.values()) for k, v in result2.items()}
 
     assert ids1 == ids2
-    assert entities.NOW == original_now
+    assert original_now == entities.NOW
 
 
 async def test_narrative_consistency(db_session: AsyncSession):

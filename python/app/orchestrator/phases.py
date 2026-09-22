@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class InvestigationPhase(str, Enum):
+class InvestigationPhase(StrEnum):
     """Seven phases of an operational investigation."""
 
     SIGNAL_INGESTION = "signal_ingestion"

@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.account import Account
+    from app.models.device import Device
+    from app.models.incident import Incident
+    from app.models.site import Site
 
 
 class Ticket(Base, TimestampMixin):
@@ -23,7 +31,7 @@ class Ticket(Base, TimestampMixin):
     priority: Mapped[str] = mapped_column(String(50), nullable=False, default="medium")
     channel: Mapped[str] = mapped_column(String(50), nullable=False, default="email")
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="open")
-    account: Mapped["Account"] = relationship(back_populates="tickets")
-    site: Mapped["Site | None"] = relationship(back_populates="tickets")
-    device: Mapped["Device | None"] = relationship(back_populates="tickets")
-    incident: Mapped["Incident | None"] = relationship(back_populates="tickets")
+    account: Mapped[Account] = relationship(back_populates="tickets")
+    site: Mapped[Site | None] = relationship(back_populates="tickets")
+    device: Mapped[Device | None] = relationship(back_populates="tickets")
+    incident: Mapped[Incident | None] = relationship(back_populates="tickets")

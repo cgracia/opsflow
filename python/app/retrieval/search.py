@@ -1,10 +1,10 @@
 from qdrant_client.models import (
-    Filter,
     FieldCondition,
-    MatchAny,
-    SearchRequest,
+    Filter,
     FusionQuery,
+    MatchAny,
     NamedSparseVector,
+    SearchRequest,
     SparseVector,
 )
 

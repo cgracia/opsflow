@@ -1,9 +1,8 @@
 import pytest
-from datetime import datetime, timezone
 
+from app.schemas.investigation import HistoricalReport
 from app.specialists import historical as historical_mod
 from app.specialists.historical import HistoricalInvestigator
-from app.schemas.investigation import HistoricalReport
 
 
 @pytest.mark.asyncio
@@ -15,7 +14,10 @@ async def test_finds_historical_navigation_issue():
             "id": "HTKT-001",
             "entity_id": "ACC-1001",
             "source_type": "historical_ticket",
-            "content": "Navigation path planning failures after v3.1.2 update. Rollback to v3.1.1 resolved.",
+            "content": (
+                "Navigation path planning failures after v3.1.2 update. "
+                "Rollback to v3.1.1 resolved."
+            ),
             "metadata": {"version": "3.1.2", "resolution": "rollback"},
         },
     ]
@@ -37,8 +39,6 @@ async def test_finds_historical_navigation_issue():
             "metadata": {"version_from": "3.2.1", "version_to": "3.3.0", "status": "halted"},
         },
     ]
-
-    call_count = [0]
 
     async def mock_search(*args, **kwargs):
         source = kwargs.get("source_types", [])

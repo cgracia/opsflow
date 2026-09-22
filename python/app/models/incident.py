@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.account import Account
+    from app.models.ticket import Ticket
 
 
 class Incident(Base, TimestampMixin):
@@ -19,5 +24,5 @@ class Incident(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    account: Mapped["Account"] = relationship(back_populates="incidents")
-    tickets: Mapped[list["Ticket"]] = relationship(back_populates="incident")
+    account: Mapped[Account] = relationship(back_populates="incidents")
+    tickets: Mapped[list[Ticket]] = relationship(back_populates="incident")

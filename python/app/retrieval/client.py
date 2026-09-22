@@ -1,11 +1,11 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
-    VectorParams,
-    SparseVectorParams,
-    SparseIndexParams,
     PointStruct,
+    SparseIndexParams,
     SparseVector,
+    SparseVectorParams,
+    VectorParams,
 )
 
 COLLECTION_NAME = "operational_evidence"
@@ -16,7 +16,7 @@ def _to_sparse(sparse_dict: dict | None) -> SparseVector:
     """Convert a {index: value} dict to a SparseVector, or return empty."""
     if not sparse_dict:
         return SparseVector(indices=[], values=[])
-    indices = [int(k) for k in sparse_dict.keys()]
+    indices = [int(k) for k in sparse_dict]
     values = [float(v) for v in sparse_dict.values()]
     return SparseVector(indices=indices, values=values)
 
