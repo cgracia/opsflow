@@ -61,14 +61,28 @@ model was designed rather than fitted to its demo.
 Cluster first, because hardware is the only unknown-unknown in the plan.
 Everything after it is estimable work.
 
-- [ ] Add `LICENSE` (MIT). The README has claimed MIT with no file present
+- [x] Add `LICENSE` (MIT). The README had claimed MIT with no file present
       since the repo was created.
-- [ ] Extract `src/`, `Cargo.toml`, `Cargo.lock` and the praxis test fixtures
-      to a separate repo, preserving history via `git subtree split`.
-- [ ] Rewrite the README lede: what this is now, not what it demoed.
+- [x] Extract `src/`, `Cargo.toml`, `Cargo.lock` and the praxis test fixtures
+      to a separate repo, preserving history. **Done with `git-filter-repo`, not
+      `git subtree split`** — the Rust half was not under a single path prefix,
+      which is all `subtree split` can take. 29 commits preserved; the extracted
+      repo builds and its 103 tests pass.
+- [x] Rewrite the README lede: what this is now, not what it demoed.
 - [ ] Stand up k3s. The `services.k3s-home` NixOS module already exists and is
-      currently enabled on zero hosts.
+      currently enabled on zero hosts. Blocked on host provisioning, and tracked
+      as its own issue.
 - [ ] Stop when `kubectl get nodes` returns Ready.
+
+**Unplanned work that came out of this day.** Swapping CI from the Rust gate to
+a Python one revealed the engine had never been linted — CI had only ever gated
+the half that was being removed. 143 errors, all fixed with no rules disabled.
+Three were more than cosmetic: 30 `F821` undefined-name in the SQLAlchemy models
+(relationship annotations referencing never-imported classes, fixed with
+`TYPE_CHECKING` imports), a schema test asserting bare `Exception` so it would
+have passed on almost any failure, and an unpinned ruff with an implicit rule
+set, which meant the gate moved on its own between releases. Ruff is now pinned
+exactly and the rule set declared.
 
 ## Day 2–3 — real signals in
 
