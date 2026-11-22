@@ -110,9 +110,31 @@ def _historical_report():
     )
 
 
+def _entity_map() -> dict:
+    """Explicit entity-context injection for tests (there is no hard-coded
+    fallback any more — v1's constant resolution is gone)."""
+    return {
+        "_severity": "high",
+        "_query_text": "navigation errors after v3.3.0 deployment",
+        "_site_name": "Portland Distribution Center",
+        "account": {"id": "ACC-1001", "name": "Meridian Logistics", "tier": "enterprise"},
+        "site": {"id": "SITE-2001", "name": "Portland Distribution Center"},
+        "fleet": {"id": "FLT-101", "name": "Warehouse Alpha Fleet"},
+        "devices": [
+            {"id": "DEV-401", "status": "error", "software": "3.3.0"},
+            {"id": "DEV-402", "status": "degraded", "software": "3.3.0"},
+            {"id": "DEV-403", "status": "degraded", "software": "3.3.0"},
+        ],
+        "deployment": {"id": "DEPL-501", "status": "in_progress", "version": "3.3.0"},
+        "software_revision": {"id": "SWREV-302", "version": "3.3.0"},
+    }
+
+
 def _make_manager(trace_callback=None) -> InvestigationManager:
     qdrant = MagicMock()
     qdrant._collection_ready = True
+    qdrant._fake_vector = lambda query: [0.0] * 384
+    qdrant.client.query_points.return_value = MagicMock(points=[])
     return InvestigationManager(
         qdrant_manager=qdrant,
         telemetry_investigator=MagicMock(),
@@ -129,14 +151,17 @@ async def test_golden_path_multi_signal_convergence():
     manager._telemetry.investigate = AsyncMock(return_value=_telemetry_report())
     manager._historical.investigate = AsyncMock(return_value=_historical_report())
 
-    signal_ids = SignalIds(ticket_id="TCK-1001", alert_id="ALT-2001", event_id="EVT-3001")
+    SignalIds(ticket_id="TCK-1001", alert_id="ALT-2001", event_id="EVT-3001")
 
     import app.orchestrator.investigation as inv_module
 
     original_search = inv_module.search_evidence
     inv_module.search_evidence = AsyncMock(return_value=_meridian_evidence())
     try:
-        result = await manager.run_investigation(signal_ids)
+        result = await manager.run_investigation(
+            SignalIds(ticket_id="TCK-1001", alert_id="ALT-2001", event_id="EVT-3001"),
+            entity_map=_entity_map(),
+        )
     finally:
         inv_module.search_evidence = original_search
 
@@ -168,11 +193,12 @@ async def test_golden_path_multi_signal_convergence():
     assert isinstance(result.operator_briefing, str)
     assert len(result.operator_briefing) > 50
 
-    assert isinstance(result.customer_response_draft, str)
-    assert len(result.customer_response_draft) > 50
+    # ESCALATE does not approve a customer draft — it must be withheld.
+    assert result.customer_response_draft is None
+    assert "WITHHELD" in result.operator_briefing
 
     for forbidden in ("Langfuse", "Qdrant", "LLM"):
-        assert forbidden not in result.customer_response_draft
+        assert forbidden not in result.operator_briefing
 
     assert result.telemetry_analysis is not None
     assert isinstance(result.telemetry_analysis, TelemetryReport)
@@ -242,7 +268,8 @@ async def test_investigation_with_tracing_integrated():
     inv_module.search_evidence = AsyncMock(return_value=_meridian_evidence())
     try:
         result = await manager.run_investigation(
-            SignalIds(ticket_id="TCK-1001", alert_id="ALT-2001", event_id="EVT-3001")
+            SignalIds(ticket_id="TCK-1001", alert_id="ALT-2001", event_id="EVT-3001"),
+            entity_map=_entity_map(),
         )
     finally:
         inv_module.search_evidence = original_search

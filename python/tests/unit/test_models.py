@@ -1,5 +1,4 @@
-from sqlalchemy import inspect
-from sqlalchemy.dialects.sqlite import JSON
+from sqlalchemy import JSON, inspect
 from sqlalchemy.orm import RelationshipProperty
 
 from app.models import (

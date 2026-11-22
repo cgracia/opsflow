@@ -134,6 +134,25 @@ def test_end_span_updates_and_ends():
     span.end.assert_called_once()
 
 
+def _entity_map() -> dict:
+    return {
+        "account": {"id": "ACC-1001", "name": "Meridian Logistics", "tier": "enterprise"},
+        "site": {"id": "SITE-2001", "name": "Portland Distribution Center"},
+        "fleet": {"id": "FLT-101", "name": "Warehouse Alpha Fleet"},
+        "devices": [{"id": "DEV-401", "status": "error", "software": "3.3.0"}],
+        "deployment": {"id": "DEPL-501", "status": "in_progress", "version": "3.3.0"},
+        "software_revision": {"id": "SWREV-302", "version": "3.3.0"},
+    }
+
+
+def _qdrant_stub() -> MagicMock:
+    stub = MagicMock()
+    stub._collection_ready = True
+    stub._fake_vector = lambda query: [0.0] * 384
+    stub.client.query_points.return_value = MagicMock(points=[])
+    return stub
+
+
 def test_end_span_unknown_id_is_noop():
     tracer, _ = _make_tracer()
     tracer.end_span("nonexistent-span-id")
@@ -144,8 +163,7 @@ async def test_investigation_with_tracing():
     client, trace_obj, _span_obj = _mock_langfuse_client()
     tracer = LangfuseTracer(client=client)
 
-    qdrant = MagicMock()
-    qdrant._collection_ready = True
+    qdrant = _qdrant_stub()
     manager = InvestigationManager(qdrant, trace_callback=tracer)
 
     manager._telemetry = MagicMock()
@@ -169,7 +187,7 @@ async def test_investigation_with_tracing():
     )
 
     signal_ids = SignalIds(ticket_id="TCK-1001", alert_id="ALT-2001")
-    result = await manager.run_investigation(signal_ids)
+    result = await manager.run_investigation(signal_ids, entity_map=_entity_map())
 
     assert result.trace_id.startswith("trace-")
     assert result.investigation_id.startswith("INV-")
@@ -181,8 +199,7 @@ async def test_investigation_with_tracing():
 
 @pytest.mark.asyncio
 async def test_investigation_without_tracing_unchanged():
-    qdrant = MagicMock()
-    qdrant._collection_ready = True
+    qdrant = _qdrant_stub()
     manager = InvestigationManager(qdrant)
 
     manager._telemetry = MagicMock()
@@ -193,7 +210,7 @@ async def test_investigation_without_tracing_unchanged():
     manager._historical.investigate = AsyncMock(return_value=HistoricalReport(confidence=0.3))
 
     signal_ids = SignalIds(ticket_id="TCK-1001")
-    result = await manager.run_investigation(signal_ids)
+    result = await manager.run_investigation(signal_ids, entity_map=_entity_map())
 
     assert result.trace_id.startswith("trace-")
     assert result.investigation_id.startswith("INV-")
@@ -217,8 +234,7 @@ async def test_phase_spans_are_started_and_ended():
     client, _trace_obj, _ = _mock_langfuse_client()
     tracer = LangfuseTracer(client=client)
 
-    qdrant = MagicMock()
-    qdrant._collection_ready = True
+    qdrant = _qdrant_stub()
     manager = InvestigationManager(qdrant, trace_callback=tracer)
 
     manager._telemetry = MagicMock()
@@ -241,7 +257,7 @@ async def test_phase_spans_are_started_and_ended():
     )
 
     signal_ids = SignalIds(ticket_id="TCK-1001")
-    result = await manager.run_investigation(signal_ids)
+    result = await manager.run_investigation(signal_ids, entity_map=_entity_map())
 
     assert result.trace_id in tracer._traces
 
@@ -256,8 +272,7 @@ async def test_specialist_sub_spans_created():
     client, trace_obj, _ = _mock_langfuse_client()
     tracer = LangfuseTracer(client=client)
 
-    qdrant = MagicMock()
-    qdrant._collection_ready = True
+    qdrant = _qdrant_stub()
     manager = InvestigationManager(qdrant, trace_callback=tracer)
 
     manager._telemetry = MagicMock()
@@ -268,7 +283,7 @@ async def test_specialist_sub_spans_created():
     manager._historical.investigate = AsyncMock(return_value=HistoricalReport(confidence=0.3))
 
     signal_ids = SignalIds(ticket_id="TCK-1001")
-    await manager.run_investigation(signal_ids)
+    await manager.run_investigation(signal_ids, entity_map=_entity_map())
 
     span_names = [call.kwargs.get("name", "") for call in trace_obj.span.call_args_list]
     assert "specialist.telemetry" in span_names
