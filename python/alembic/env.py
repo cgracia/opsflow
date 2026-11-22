@@ -4,13 +4,17 @@ from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import app.models  # noqa: F401  — register all models on Base.metadata
 from alembic import context
 from app.config import Settings
 from app.db.base import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: alembic runs inside the API process at
+    # startup; the default True would silence uvicorn's loggers for the rest
+    # of the process lifetime, hiding every later traceback.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

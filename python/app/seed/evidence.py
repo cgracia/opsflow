@@ -205,11 +205,145 @@ def get_deployment_manifest() -> list[dict]:
     ]
 
 
+def get_northwind_evidence() -> list[dict]:
+    """Scenario B — 2 vague documents. Deliberately weak evidence."""
+    return [
+        {
+            "id": "HTKT-101",
+            "entity_id": "ACC-2001",
+            "entity_type": "account",
+            "source_type": "historical_ticket",
+            "content": "Occasional temperature sensor variance noted on freezer "
+            "units during summer months. No root cause identified; readings "
+            "returned to normal on their own each time.",
+            "timestamp": THREE_MONTHS_AGO.isoformat(),
+            "metadata": {"resolution": "self_resolved", "root_cause": "unknown"},
+        },
+        {
+            "id": "RB-101",
+            "entity_id": "FLT-301",
+            "entity_type": "fleet",
+            "source_type": "runbook",
+            "content": "Runbook: Sensor Variance Check\n"
+            "1. Compare readings against the adjacent unit\n"
+            "2. Inspect door seals for condensation\n"
+            "3. If variance persists over 24h, schedule recalibration\n"
+            "4. Escalate only if product temperature exceeds safe range",
+            "timestamp": NOW.isoformat(),
+            "metadata": {"type": "runbook", "category": "sensor_variance"},
+        },
+    ]
+
+
+def get_atlas_evidence() -> list[dict]:
+    """Scenario C — 6 documents describing a post-update scanner regression."""
+    return [
+        {
+            "id": "HTKT-201",
+            "entity_id": "ACC-3001",
+            "entity_type": "account",
+            "source_type": "historical_ticket",
+            "content": "Barcode misread spike after v5.2.0 update on Pick Line "
+            "Fleet. Symptoms: SCAN_MISREAD_STREAK on updated robots. "
+            "Resolution: rollback to v5.1.9. Root cause: scanner exposure "
+            "parameter regression in glossy-label lighting conditions.",
+            "timestamp": THREE_MONTHS_AGO.isoformat(),
+            "metadata": {"version": "5.2.0", "resolution": "rollback"},
+        },
+        {
+            "id": "HTKT-202",
+            "entity_id": "ACC-3001",
+            "entity_type": "account",
+            "source_type": "historical_ticket",
+            "content": "Intermittent barcode misreads in high-reflectance "
+            "packaging areas. Affected 2 of 5 robots. Recalibration of "
+            "exposure parameters resolved the issue without rollback.",
+            "timestamp": (THREE_MONTHS_AGO + timedelta(days=20)).isoformat(),
+            "metadata": {"resolution": "recalibration"},
+        },
+        {
+            "id": "RB-201",
+            "entity_id": "FLT-401",
+            "entity_type": "fleet",
+            "source_type": "runbook",
+            "content": "Runbook: Scanner Misread Troubleshooting\n"
+            "1. Check scanner firmware version against fleet baseline\n"
+            "2. Review misread rate by lighting zone\n"
+            "3. If error rate > 5% after an update, check exposure parameters\n"
+            "4. If post-update, consider rollback to previous version\n"
+            "5. Escalate to vision team if rollback doesn't resolve",
+            "timestamp": NOW.isoformat(),
+            "metadata": {"type": "runbook", "category": "scanner"},
+        },
+        {
+            "id": "TEL-201",
+            "entity_id": "DEV-801",
+            "entity_type": "device",
+            "source_type": "telemetry",
+            "content": "Telemetry snapshot DEV-801 (last 2 hours):\n"
+            "- scanner_misread_rate: 23.1% (baseline: 0.4%, threshold: 2%)\n"
+            "- scan_retries_per_pick: 3.4 (baseline: 0.2)\n"
+            "- battery_level: 81%\n"
+            "- uptime_since_restart: 5h 40m\n"
+            "ANOMALY: scanner_misread_rate began climbing at 08:10 UTC, "
+            "coinciding with v5.4.0 deployment reaching this device.",
+            "timestamp": NOW.isoformat(),
+            "metadata": {"metric": "scanner_misread_rate", "baseline": 0.004, "current": 0.231},
+        },
+        {
+            "id": "TEL-202",
+            "entity_id": "FLT-401",
+            "entity_type": "fleet",
+            "source_type": "telemetry",
+            "content": "Fleet telemetry summary FLT-401 (last 2 hours):\n"
+            "- Fleet scanner_misread_rate: 12.7% (3/5 devices affected)\n"
+            "- Affected devices: DEV-801 (23.1%), DEV-802 (9.8%), DEV-803 (5.2%)\n"
+            "- Healthy devices: DEV-804, DEV-805 (all <0.5%, still on v5.3.2)\n"
+            "- Pattern: Only devices updated to v5.4.0 showing misreads\n"
+            "- Deployment DEPL-701 started at 07:00 UTC, reached devices at 08:05 UTC\n"
+            "CORRELATION: Misread onset directly correlates with v5.4.0 "
+            "activation per device.",
+            "timestamp": NOW.isoformat(),
+            "metadata": {
+                "metric": "fleet_scanner_misread_rate",
+                "affected_count": 3,
+                "total_count": 5,
+            },
+        },
+        {
+            "id": "DPM-201",
+            "entity_id": "DEPL-701",
+            "entity_type": "deployment",
+            "source_type": "deployment",
+            "content": "Deployment manifest DEPL-701:\n"
+            "- Target: Fleet FLT-401 (Pick Line)\n"
+            "- Software: v5.4.0 (SWREV-502)\n"
+            "- Previous: v5.3.2 (SWREV-501)\n"
+            "- Started: rolling update at 07:00 UTC\n"
+            "- Phase 1: DEV-801, DEV-802 updated at 08:05 UTC\n"
+            "- Phase 2: DEV-803 updated at 08:09 UTC\n"
+            "- Phase 3: DEV-804, DEV-805 (pending, halted due to misreads)\n"
+            "- Status: HALTED — scanner misreads detected on updated devices\n"
+            "Changes in v5.4.0: New scanner pipeline, updated exposure "
+            "parameters, revised decode algorithm.",
+            "timestamp": T_MINUS_2H.isoformat(),
+            "metadata": {
+                "version_from": "5.3.2",
+                "version_to": "5.4.0",
+                "strategy": "rolling",
+                "status": "halted",
+            },
+        },
+    ]
+
+
 def get_all_evidence() -> list[dict]:
-    """Return all evidence documents for Qdrant indexing."""
+    """Return all evidence documents for Qdrant indexing, across scenarios."""
     return (
         get_historical_tickets()
         + get_runbooks()
         + get_telemetry_snapshots()
         + get_deployment_manifest()
+        + get_northwind_evidence()
+        + get_atlas_evidence()
     )

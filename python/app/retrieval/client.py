@@ -1,24 +1,28 @@
+import uuid
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
     PointStruct,
     SparseIndexParams,
-    SparseVector,
     SparseVectorParams,
     VectorParams,
 )
+
+from app.retrieval.tokenization import sparse_from_text
 
 COLLECTION_NAME = "operational_evidence"
 VECTOR_SIZE = 384  # all-MiniLM-L6-v2 dimension
 
 
-def _to_sparse(sparse_dict: dict | None) -> SparseVector:
-    """Convert a {index: value} dict to a SparseVector, or return empty."""
-    if not sparse_dict:
-        return SparseVector(indices=[], values=[])
-    indices = [int(k) for k in sparse_dict]
-    values = [float(v) for v in sparse_dict.values()]
-    return SparseVector(indices=indices, values=values)
+def _point_id(doc_id: str) -> str:
+    """Deterministic UUID point ID for a document ID.
+
+    Qdrant (>= 1.20) only accepts unsigned integers or UUIDs as point IDs —
+    plain strings like ``HTKT-001`` are rejected with a 400. The readable ID
+    is kept in the payload as ``doc_id``.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"opsflow:{doc_id}"))
 
 
 class QdrantManager:
@@ -55,7 +59,6 @@ class QdrantManager:
         timestamp: str | None = None,
         metadata: dict | None = None,
         dense_vector: list[float] | None = None,
-        sparse_vector: dict | None = None,
     ) -> None:
         """Index a single document into the collection."""
         if not self._collection_ready:
@@ -66,6 +69,7 @@ class QdrantManager:
             dense_vector = self._fake_vector(doc_id)
 
         payload = {
+            "doc_id": doc_id,
             "entity_id": entity_id,
             "entity_type": entity_type,
             "source_type": source_type,
@@ -75,8 +79,10 @@ class QdrantManager:
         }
 
         point = PointStruct(
-            id=doc_id,
-            vector={"": dense_vector, "bm25": _to_sparse(sparse_vector)},
+            id=_point_id(doc_id),
+            # Sparse vectors are built from the content with the shared
+            # tokenization so index-time and query-time indices coincide.
+            vector={"": dense_vector, "bm25": sparse_from_text(content)},
             payload=payload,
         )
         self.client.upsert(collection_name=COLLECTION_NAME, points=[point])
@@ -91,9 +97,13 @@ class QdrantManager:
             dense = doc.get("dense_vector") or self._fake_vector(doc["id"])
             points.append(
                 PointStruct(
-                    id=doc["id"],
-                    vector={"": dense, "bm25": _to_sparse(doc.get("sparse_vector"))},
+                    id=_point_id(doc["id"]),
+                    vector={
+                        "": dense,
+                        "bm25": sparse_from_text(doc["content"]),
+                    },
                     payload={
+                        "doc_id": doc["id"],
                         "entity_id": doc["entity_id"],
                         "entity_type": doc["entity_type"],
                         "source_type": doc["source_type"],

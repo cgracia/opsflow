@@ -106,7 +106,7 @@ class InvestigationResponse(BaseModel):
     hypotheses: list[Hypothesis] = []
     governance_decision: GovernanceDecision | None = None
     operator_briefing: str = ""
-    customer_response_draft: str = ""
+    customer_response_draft: str | None = None  # None when governance withholds the draft
     created_at: datetime | None = None
 
 

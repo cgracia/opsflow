@@ -3,10 +3,21 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.governance.engine import GovernanceEngine
 from app.llm.client import LLMClient
 from app.llm.prompts import HYPOTHESIS_GENERATION
+from app.orchestrator.outputs import (
+    build_customer_draft,
+    build_operator_briefing,
+    customer_draft_allowed,
+)
 from app.orchestrator.phases import InvestigationPhase
+from app.orchestrator.resolution import (
+    ResolutionResult,
+    resolve_from_signals,
+)
 from app.retrieval.client import QdrantManager
 from app.retrieval.search import search_evidence
 from app.schemas.investigation import (
@@ -65,6 +76,7 @@ class InvestigationManager:
     async def run_investigation(
         self,
         signal_ids: SignalIds,
+        db_session: AsyncSession | None = None,
         entity_map: dict | None = None,
     ) -> InvestigationResponse:
         investigation_id = f"INV-{uuid.uuid4().hex[:8]}"
@@ -79,23 +91,26 @@ class InvestigationManager:
         completed_phases: list[str] = []
 
         span_id_1 = self._start_phase_span(trace_id, InvestigationPhase.SIGNAL_INGESTION)
-        signals = self._ingest_signals(signal_ids)
+        self._ingest_signals(signal_ids)
         completed_phases.append(InvestigationPhase.SIGNAL_INGESTION.value)
         self._end_phase_span(span_id_1)
 
         span_id_2 = self._start_phase_span(trace_id, InvestigationPhase.ENTITY_RESOLUTION)
-        entity_context = await self._resolve_entities(signals, entity_map)
+        resolution = await self._resolve_entities(signal_ids, db_session, entity_map)
+        entity_context = resolution.entity_context
         completed_phases.append(InvestigationPhase.ENTITY_RESOLUTION.value)
         self._end_phase_span(span_id_2)
 
         span_id_3 = self._start_phase_span(trace_id, InvestigationPhase.EVIDENCE_RETRIEVAL)
-        evidence = await self._retrieve_evidence(signals, entity_context, trace_id, span_id_3)
+        evidence = await self._retrieve_evidence(
+            resolution.query_text, entity_context, trace_id, span_id_3
+        )
         completed_phases.append(InvestigationPhase.EVIDENCE_RETRIEVAL.value)
         self._end_phase_span(span_id_3)
 
         span_id_4 = self._start_phase_span(trace_id, InvestigationPhase.SPECIALIST_INVESTIGATION)
         telemetry_report, historical_report = await self._run_specialists(
-            entity_context, signals, trace_id, span_id_4
+            entity_context, resolution.query_text, trace_id, span_id_4
         )
         completed_phases.append(InvestigationPhase.SPECIALIST_INVESTIGATION.value)
         self._end_phase_span(span_id_4)
@@ -106,8 +121,9 @@ class InvestigationManager:
             evidence,
             telemetry_report,
             historical_report,
-            trace_id,
-            span_id_5,
+            severity=resolution.severity,
+            trace_id=trace_id,
+            parent_span_id=span_id_5,
         )
         completed_phases.append(InvestigationPhase.HYPOTHESIS_GENERATION.value)
         self._end_phase_span(span_id_5)
@@ -118,12 +134,13 @@ class InvestigationManager:
         self._end_phase_span(span_id_6)
 
         span_id_7 = self._start_phase_span(trace_id, InvestigationPhase.OUTPUT_GENERATION)
-        operator_briefing, customer_response = await self._generate_outputs(
+        operator_briefing, customer_response = self._generate_outputs(
             entity_context,
             hypotheses,
             telemetry_report,
             historical_report,
             governance,
+            resolution.site_name,
             trace_id,
             span_id_7,
         )
@@ -157,48 +174,77 @@ class InvestigationManager:
             signals["event_id"] = signal_ids.event_id
         return signals
 
-    async def _resolve_entities(self, signals: dict, entity_map: dict | None) -> EntityContext:
-        if entity_map:
-            return EntityContext(**entity_map)
-        return EntityContext(
-            account={"id": "ACC-1001", "name": "Meridian Logistics", "tier": "enterprise"},
-            site={"id": "SITE-2001", "name": "Portland Distribution Center"},
-            fleet={"id": "FLT-101", "name": "Warehouse Alpha Fleet"},
-            devices=[
-                {"id": "DEV-401", "status": "error", "software": "v3.3.0"},
-                {"id": "DEV-402", "status": "degraded", "software": "v3.3.0"},
-                {"id": "DEV-403", "status": "degraded", "software": "v3.3.0"},
-            ],
-            deployment={"id": "DEPL-501", "status": "in_progress", "version": "v3.3.0"},
-            software_revision={"id": "SWREV-302", "version": "v3.3.0"},
-        )
-
-    async def _retrieve_evidence(
+    async def _resolve_entities(
         self,
-        signals: dict,
-        entity_context: EntityContext,
-        trace_id: str | None = None,
-        parent_span_id: str | None = None,
-    ) -> list[EvidenceItem]:
-        entity_ids = []
+        signal_ids: SignalIds,
+        db_session: AsyncSession | None,
+        entity_map: dict | None,
+    ) -> ResolutionResult:
+        """Resolve signals to their entity graph.
+
+        v1 returned a hard-coded entity context here, so unknown signal IDs
+        produced an investigation of an unrelated incident. Resolution now
+        comes from the database and unknown IDs raise. ``entity_map`` remains
+        solely as an explicit injection point for tests.
+        """
+        if entity_map is not None:
+            # Explicit injection point for tests. Underscore keys are
+            # test-only knobs consumed here, never part of EntityContext.
+            injected = dict(entity_map)
+            severity = injected.pop("_severity", "medium")
+            query_text = injected.pop("_query_text", "")
+            site_name = injected.pop("_site_name", "")
+            account_name = injected.get("account", {}).get("name", "")
+            return ResolutionResult(
+                entity_context=EntityContext(**injected),
+                account_name=account_name,
+                site_name=site_name,
+                severity=severity,
+                query_text=query_text,
+            )
+        if db_session is None:
+            raise ValueError(
+                "Entity resolution requires a database session or an explicit entity_map"
+            )
+        return await resolve_from_signals(db_session, signal_ids)
+
+    def _context_entity_ids(self, entity_context: EntityContext) -> list[str]:
+        """Entity IDs used to filter retrieval to the resolved graph."""
+        entity_ids: list[str] = []
         if entity_context.account:
             entity_ids.append(entity_context.account.get("id", ""))
+        if entity_context.site:
+            entity_ids.append(entity_context.site.get("id", ""))
         if entity_context.fleet:
             entity_ids.append(entity_context.fleet.get("id", ""))
         for d in entity_context.devices:
             entity_ids.append(d.get("id", ""))
+        if entity_context.deployment:
+            entity_ids.append(entity_context.deployment.get("id", ""))
+        return [e for e in entity_ids if e]
+
+    async def _retrieve_evidence(
+        self,
+        query_text: str,
+        entity_context: EntityContext,
+        trace_id: str | None = None,
+        parent_span_id: str | None = None,
+    ) -> list[EvidenceItem]:
+        """Retrieve evidence for the resolved entities.
+
+        Retrieval failures propagate: a broken Qdrant must surface as a failed
+        investigation, never as a successful one with zero evidence.
+        """
+        entity_ids = self._context_entity_ids(entity_context)
+        query = query_text or " ".join(entity_ids)
 
         retrieval_span_id = self._start_sub_span(trace_id, RETRIEVAL_HYBRID, parent_span_id)
-        try:
-            results = await search_evidence(
-                query="navigation error device blocked anomaly alert",
-                manager=self._qdrant,
-                entity_ids=entity_ids,
-                limit=15,
-            )
-        except Exception as e:
-            logger.warning("Failed to retrieve evidence: %s", e)
-            results = []
+        results = await search_evidence(
+            query=query,
+            manager=self._qdrant,
+            entity_ids=entity_ids,
+            limit=15,
+        )
         self._end_sub_span(retrieval_span_id, output={"evidence_count": len(results)})
 
         return [
@@ -216,26 +262,33 @@ class InvestigationManager:
     async def _run_specialists(
         self,
         entity_context: EntityContext,
-        signals: dict,
+        symptoms: str,
         trace_id: str | None = None,
         parent_span_id: str | None = None,
     ) -> tuple[TelemetryReport, HistoricalReport]:
+        """Dispatch to specialists with the resolved entity scope.
+
+        Specialist queries raise on retrieval failure like the main phase.
+        """
         device_id = entity_context.devices[0]["id"] if entity_context.devices else "unknown"
         fleet_id = entity_context.fleet.get("id", "") if entity_context.fleet else ""
+        deployment_id = entity_context.deployment.get("id", "") if entity_context.deployment else ""
 
         tel_span_id = self._start_sub_span(trace_id, TELEMETRY_SPECIALIST, parent_span_id)
         telemetry_report = await self._telemetry.investigate(
             device_id=device_id,
             fleet_id=fleet_id,
+            symptoms=symptoms,
         )
         self._end_sub_span(tel_span_id)
 
         hist_span_id = self._start_sub_span(trace_id, HISTORICAL_SPECIALIST, parent_span_id)
-        entity_ids = [device_id, fleet_id]
+        account_id = entity_context.account.get("id", "") if entity_context.account else ""
+        entity_ids = [e for e in (account_id, device_id, fleet_id, deployment_id) if e]
         historical_report = await self._historical.investigate(
             entity_ids=entity_ids,
-            entity_types=["device", "fleet"],
-            symptoms="navigation error device blocked",
+            entity_types=["account", "device", "fleet", "deployment"],
+            symptoms=symptoms,
         )
         self._end_sub_span(hist_span_id)
 
@@ -247,6 +300,7 @@ class InvestigationManager:
         evidence: list[EvidenceItem],
         telemetry: TelemetryReport,
         historical: HistoricalReport,
+        severity: str = "medium",
         trace_id: str | None = None,
         parent_span_id: str | None = None,
     ) -> list[Hypothesis]:
@@ -294,12 +348,13 @@ class InvestigationManager:
             hypotheses.append(
                 Hypothesis(
                     id="H-1",
-                    description=f"Software version {version} introduced a regression in the "
-                    f"navigation engine causing path planning failures across affected devices",
+                    description=f"Software version {version} introduced a regression on the "
+                    f"affected devices — telemetry anomalies began with this deployment and "
+                    f"similar past incidents required a rollback",
                     confidence=0.85,
                     evidence_ids=[e.source_id for e in evidence[:3]]
                     + telemetry.evidence_references[:2],
-                    severity="high",
+                    severity=severity,
                     is_primary=True,
                 )
             )
@@ -308,11 +363,11 @@ class InvestigationManager:
             hypotheses.append(
                 Hypothesis(
                     id="H-2",
-                    description=f"Recurring sensor fusion/navigation issue pattern — "
+                    description=f"Recurring issue pattern — "
                     f"{len(historical.recurring_patterns)} similar past incidents detected",
                     confidence=0.65,
                     evidence_ids=historical.evidence_references[:2],
-                    severity="medium",
+                    severity=severity,
                     is_primary=False,
                 )
             )
@@ -369,49 +424,34 @@ class InvestigationManager:
         )
         return decision
 
-    async def _generate_outputs(
+    def _generate_outputs(
         self,
         entity_context: EntityContext,
         hypotheses: list[Hypothesis],
         telemetry: TelemetryReport,
         historical: HistoricalReport,
         governance: GovernanceDecision,
+        site_name: str = "",
         trace_id: str | None = None,
         parent_span_id: str | None = None,
-    ) -> tuple[str, str]:
-        account_name = (
-            entity_context.account.get("name", "Unknown") if entity_context.account else "Unknown"
-        )
-        primary = next(
-            (h for h in hypotheses if h.is_primary), hypotheses[0] if hypotheses else None
-        )
+    ) -> tuple[str, str | None]:
+        """Generate outputs, gated by the governance decision.
+
+        v1 built both drafts here as fixed templates and never consulted
+        governance — a blocked customer draft was returned anyway, claiming a
+        root cause and a two-hour resolution. The customer draft is now
+        emitted only when governance approves it, and both outputs are built
+        from the actual evidence and hypotheses.
+        """
+        draft_allowed = customer_draft_allowed(governance)
 
         briefing_span_id = self._start_sub_span(
             trace_id,
             LLM_OPERATOR_BRIEFING,
             parent_span_id,
         )
-        operator_briefing = (
-            "INVESTIGATION BRIEFING\n"
-            "==================================================\n"
-            f"Investigation for: {account_name}\n"
-            "==================================================\n\n"
-            "ENTITY CONTEXT:\n"
-            f"  Account: {entity_context.account}\n"
-            f"  Fleet: {entity_context.fleet}\n"
-            f"  Affected devices: {len(entity_context.devices)}\n\n"
-            "PRIMARY HYPOTHESIS:\n"
-            f"  {primary.description if primary else 'No hypothesis'}\n"
-            f"  Confidence: {primary.confidence if primary else 0:.0%}\n"
-            f"  Severity: {primary.severity if primary else 'unknown'}\n\n"
-            "TELEMETRY FINDINGS:\n"
-            + "\n".join(f"  - {f}" for f in telemetry.findings[:5])
-            + "\n\nHISTORICAL PATTERNS:\n"
-            + "\n".join(f"  - {p}" for p in historical.recurring_patterns[:3])
-            + "\n\nGOVERNANCE:\n"
-            f"  Action: {governance.action_classification.value}\n"
-            f"  Escalation: {'YES' if governance.escalation_required else 'NO'}\n"
-            f"  {governance.reasoning}\n"
+        operator_briefing = build_operator_briefing(
+            entity_context, hypotheses, telemetry, historical, governance, draft_allowed
         )
         self._end_sub_span(
             briefing_span_id,
@@ -424,22 +464,13 @@ class InvestigationManager:
             parent_span_id,
         )
         customer_response = (
-            f"Dear {account_name} Team,\n\n"
-            "We are aware of the issue affecting your devices at the Portland Distribution Center. "
-            "Our team has identified the root cause and is actively working on a resolution.\n\n"
-            "What we know: A recent software update has caused unexpected behavior in a subset of "
-            "your devices. "
-            "We have halted the update and are preparing a fix.\n\n"
-            f"Current status: {len(entity_context.devices)} devices are impacted. "
-            "Your remaining devices continue to operate normally.\n\n"
-            "Next steps: We expect to have a resolution within the next 2 hours and will provide "
-            "an update at that time.\n\n"
-            "Please don't hesitate to reach out if you have any questions.\n\n"
-            "Best regards,\nOperations Team"
+            build_customer_draft(entity_context, hypotheses, site_name) if draft_allowed else None
         )
         self._end_sub_span(
             response_span_id,
-            output={"length": len(customer_response)},
+            output=(
+                {"length": len(customer_response)} if customer_response else {"withheld": True}
+            ),
         )
 
         return operator_briefing, customer_response

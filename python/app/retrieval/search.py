@@ -1,14 +1,26 @@
+"""Hybrid evidence search: RRF fusion of dense and sparse legs.
+
+Both legs use the qdrant-client ``Prefetch`` API (``SearchRequest`` objects
+were removed from ``query_points`` prefetch handling and raised a validation
+error on every call, which callers used to swallow).
+
+The dense leg is a deterministic hash of the query (disclosed simulation —
+not semantically meaningful). The sparse leg uses the shared tokenization in
+``app.retrieval.tokenization`` so query indices coincide with index-time
+indices and keyword overlap actually matches.
+"""
+
 from qdrant_client.models import (
     FieldCondition,
     Filter,
+    Fusion,
     FusionQuery,
     MatchAny,
-    NamedSparseVector,
-    SearchRequest,
-    SparseVector,
+    Prefetch,
 )
 
 from app.retrieval.client import COLLECTION_NAME, QdrantManager
+from app.retrieval.tokenization import sparse_from_text
 
 
 def _make_filter(
@@ -30,45 +42,40 @@ async def search_evidence(
     source_types: list[str] | None = None,
     limit: int = 10,
 ) -> list[dict]:
-    """Hybrid search: RRF fusion of dense + sparse vectors."""
+    """Hybrid search: RRF fusion of dense + sparse vectors.
+
+    Raises whatever the Qdrant client raises on transport or request errors —
+    callers must not swallow retrieval failures into empty results.
+    """
     if not manager._collection_ready:
         manager.ensure_collection()
 
     query_filter = _make_filter(entity_ids, source_types)
 
-    # Dense search
-    dense_vector = manager._fake_vector(query)
-    request_dense = SearchRequest(
-        vector={"name": "", "vector": dense_vector},
-        filter=query_filter,
-        limit=limit,
-        with_payload=True,
-    )
-
-    # Sparse search (BM25-style keyword matching)
-    words = query.lower().split()
-    unique_words = list(set(words))
-    word_indices = {w: i for i, w in enumerate(unique_words)}
-    sparse_vec = SparseVector(
-        indices=[word_indices[w] for w in unique_words],
-        values=[float(words.count(w)) for w in unique_words],
-    )
-    request_sparse = SearchRequest(
-        vector=NamedSparseVector(name="bm25", vector=sparse_vec),
-        filter=query_filter,
-        limit=limit,
-        with_payload=True,
-    )
+    prefetch = [
+        # Dense leg (deterministic hash vector — disclosed simulation)
+        Prefetch(query=manager._fake_vector(query), filter=query_filter, limit=limit),
+        # Sparse leg (shared tokenization, matches index-time vectors)
+        Prefetch(query=sparse_from_text(query), using="bm25", filter=query_filter, limit=limit),
+    ]
 
     results = manager.client.query_points(
         collection_name=COLLECTION_NAME,
-        prefetch=[request_dense, request_sparse],
-        query=FusionQuery(fusion="rrf"),
+        prefetch=prefetch,
+        query=FusionQuery(fusion=Fusion.RRF),
         limit=limit,
+        with_payload=True,
     )
 
     return [
-        {"id": point.id, "score": point.score, **(point.payload or {})} for point in results.points
+        {
+            # Prefer the readable document ID from the payload; the stored
+            # point ID is a deterministic UUID (Qdrant >= 1.20 requirement).
+            "id": (point.payload or {}).get("doc_id", str(point.id)),
+            "score": point.score,
+            **(point.payload or {}),
+        }
+        for point in results.points
     ]
 
 
@@ -82,22 +89,5 @@ async def search_by_entity(
         query=entity_id,
         manager=manager,
         entity_ids=[entity_id],
-        limit=limit,
-    )
-
-
-async def search_time_window(
-    query: str,
-    manager: QdrantManager,
-    start_time: str,
-    end_time: str,
-    limit: int = 10,
-) -> list[dict]:
-    """Search within a time window. Uses metadata filtering where available."""
-    return await search_evidence(
-        query=query,
-        manager=manager,
-        entity_ids=None,
-        source_types=None,
         limit=limit,
     )
