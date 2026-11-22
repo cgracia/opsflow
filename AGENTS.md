@@ -15,17 +15,18 @@ decides and executes; the system investigates and recommends.
 
 ## Current state, stated honestly
 
-The v1 pipeline is architecturally complete and empirically hollow. It runs
-end-to-end, but over synthetic seed data describing a fictional company
-("Meridian Logistics"), with several components simulated:
+The v1 pipeline was architecturally complete and empirically hollow; the
+integrity repairs of 2026-11 (branch `fix/honest-e2e`) made the live path
+real — resolution, retrieval and governance enforcement now work against real
+Postgres and Qdrant and are covered by integration tests — but the workload is
+still synthetic, with components simulated:
 
 | Component | Reality |
 |---|---|
 | Dense vectors | SHA-256 hashes of document IDs, not embeddings. Not semantically meaningful |
-| Sparse vectors | Whitespace-split word-count bags, not BM25 |
-| Entity resolution | Hardcoded for the one seeded scenario |
-| Both specialists | Keyword matchers. LLM path exists but is optional and off by default |
-| All evidence | 11 invented documents |
+| Sparse vectors | Word-count bags with a shared deterministic token→index hash. Genuine matching, but not BM25 |
+| Both specialists | Rule-based (generic baseline-deviation regex, generic pattern rules). LLM path exists but is optional and off by default |
+| All evidence | 19 invented documents across three fixture scenarios |
 | Signal connectors | Stubs. Accept IDs, connect to nothing |
 
 **Do not describe any of these as working.** The README's "What is simulated or
