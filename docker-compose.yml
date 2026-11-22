@@ -23,7 +23,13 @@ services:
       qdrant:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/v1/healthz || exit 1"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/healthz', timeout=3)",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -53,7 +59,9 @@ services:
       - opsflow-network
 
   qdrant:
-    image: qdrant/qdrant:latest
+    # Pinned: `latest` moved to a Debian 13 image without wget, which silently
+    # broke the previous healthcheck (the container never became healthy).
+    image: qdrant/qdrant:v1.20.2
     container_name: opsflow-qdrant
     restart: unless-stopped
     ports:
@@ -62,7 +70,8 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/health"]
+      # bash is present in the image; wget and curl are not.
+      test: ["CMD", "bash", "-c", ":> /dev/tcp/127.0.0.1/6333"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -73,6 +82,7 @@ services:
     image: clickhouse/clickhouse-server:latest
     container_name: opsflow-clickhouse
     restart: unless-stopped
+    profiles: ["observability"]
     ports:
       - "127.0.0.1:8123:8123"
     volumes:
@@ -89,6 +99,7 @@ services:
     image: redis:7-alpine
     container_name: opsflow-redis
     restart: unless-stopped
+    profiles: ["observability"]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -101,11 +112,12 @@ services:
     networks:
       - opsflow-network
 
-  # ── AI Observability (Langfuse) ─────────────────────────────
+  # ── AI Observability (Langfuse) — optional: `--profile observability` ──
   langfuse-web:
     image: langfuse/langfuse:3
     container_name: opsflow-langfuse-web
     restart: unless-stopped
+    profiles: ["observability"]
     ports:
       - "127.0.0.1:3000:3000"
     environment:
@@ -135,6 +147,7 @@ services:
     image: langfuse/langfuse:3
     container_name: opsflow-langfuse-worker
     restart: unless-stopped
+    profiles: ["observability"]
     command: ["node", "worker.js"]
     environment:
       - DATABASE_URL=postgresql://opsflow:${POSTGRES_PASSWORD:-opsflow}@postgres:5432/opsflow
@@ -159,11 +172,12 @@ services:
     networks:
       - opsflow-network
 
-  # ── Monitoring ───────────────────────────────────────────────
+  # ── Monitoring — optional: `--profile observability` ────────
   prometheus:
     image: prom/prometheus:latest
     container_name: opsflow-prometheus
     restart: unless-stopped
+    profiles: ["observability"]
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -180,6 +194,7 @@ services:
     image: grafana/grafana:latest
     container_name: opsflow-grafana
     restart: unless-stopped
+    profiles: ["observability"]
     ports:
       - "127.0.0.1:3100:3000"
     environment:

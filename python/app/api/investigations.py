@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.orchestrator.investigation import InvestigationManager
+from app.orchestrator.resolution import ConflictingSignalsError, UnknownSignalsError
 from app.retrieval.client import QdrantManager
 from app.schemas.investigation import (
     InvestigationRequest,
@@ -13,6 +16,8 @@ from app.schemas.investigation import (
     SignalIds,
 )
 from app.tracing.langfuse import create_tracer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["investigations"])
 
@@ -41,12 +46,34 @@ async def healthz() -> dict[str, str]:
 async def create_investigation(
     request: InvestigationRequest,
     qdrant: QdrantManager = Depends(get_qdrant_manager),
+    db: AsyncSession = Depends(get_db),
 ) -> InvestigationResponse:
+    """Run an investigation over the signals' resolved entity graph.
+
+    Failure semantics (v1 returned 200 with an unrelated investigation):
+
+    - 404 when a provided signal ID does not exist — we never investigate
+      fiction, and unknown IDs must not resolve to unrelated incidents.
+    - 422 when the provided signals do not belong to a single account.
+    - 503 when a dependency fails mid-investigation (e.g. Qdrant is down) —
+      a broken retrieval path must be visible, never an empty success.
+    """
     _validate_signal_ids(request.signal_ids)
 
     tracer = create_tracer()
     manager = InvestigationManager(qdrant, trace_callback=tracer)
-    result = await manager.run_investigation(request.signal_ids)
+    try:
+        result = await manager.run_investigation(request.signal_ids, db_session=db)
+    except UnknownSignalsError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictingSignalsError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Investigation failed for signals %s", request.signal_ids)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Investigation failed: {type(exc).__name__}: {exc}",
+        ) from exc
     return result
 
 
@@ -63,7 +90,11 @@ async def seed_data(
     db: AsyncSession = Depends(get_db),
     qdrant: QdrantManager = Depends(get_qdrant_manager),
 ) -> SeedResult:
-    """Seed Postgres with synthetic entity data and index evidence into Qdrant."""
+    """Seed Postgres with synthetic entity data and index evidence into Qdrant.
+
+    The three fixture scenarios are disjoint: each has its own account, site,
+    fleet, devices and evidence, so distinct investigations can be verified.
+    """
     from app.retrieval.indexer import index_all_evidence
     from app.seed.entities import seed_all
 

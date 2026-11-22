@@ -1,3 +1,12 @@
+"""Historical incident specialist: rule-based pattern analysis.
+
+Queries Qdrant for historical tickets, runbooks and deployment records scoped
+to the resolved entities. Pattern rules are generic (post-update rollback,
+sensor/latency issues, customer-facing impact) rather than navigation-
+specific. Retrieval failures propagate — a broken Qdrant must not be reported
+as "no historical data".
+"""
+
 import logging
 from datetime import datetime
 
@@ -22,52 +31,34 @@ class HistoricalInvestigator:
         time_window: tuple[datetime, datetime] | None = None,
         symptoms: str = "",
     ) -> HistoricalReport:
-        """Analyze historical incidents for the given entities.
+        """Analyze historical incidents for the given entities."""
+        ticket_results = await search_evidence(
+            query=f"historical incident failure pattern {symptoms}"[:500],
+            manager=self._qdrant,
+            entity_ids=entity_ids,
+            source_types=["historical_ticket"],
+            limit=10,
+        )
 
-        Retrieves past tickets, runbooks, and deployment records from Qdrant,
-        identifies recurring patterns and deployment adjacency.
-        """
-        # Search for historical tickets and runbooks
-        try:
-            ticket_results = await search_evidence(
-                query=f"historical navigation error failure pattern {symptoms}",
-                manager=self._qdrant,
-                entity_ids=entity_ids,
-                source_types=["historical_ticket"],
-                limit=10,
-            )
-        except Exception as e:
-            logger.warning("Failed to retrieve historical tickets: %s", e)
-            ticket_results = []
+        runbook_results = await search_evidence(
+            query=f"runbook troubleshooting {symptoms}"[:500],
+            manager=self._qdrant,
+            entity_ids=entity_ids,
+            source_types=["runbook"],
+            limit=5,
+        )
 
-        try:
-            runbook_results = await search_evidence(
-                query=f"runbook troubleshooting {symptoms}",
-                manager=self._qdrant,
-                entity_ids=entity_ids,
-                source_types=["runbook"],
-                limit=5,
-            )
-        except Exception as e:
-            logger.warning("Failed to retrieve runbook data: %s", e)
-            runbook_results = []
-
-        try:
-            deployment_results = await search_evidence(
-                query="deployment manifest software version",
-                manager=self._qdrant,
-                entity_ids=entity_ids,
-                source_types=["deployment"],
-                limit=5,
-            )
-        except Exception as e:
-            logger.warning("Failed to retrieve deployment data: %s", e)
-            deployment_results = []
+        deployment_results = await search_evidence(
+            query=f"deployment manifest software version {symptoms}"[:500],
+            manager=self._qdrant,
+            entity_ids=entity_ids,
+            source_types=["deployment"],
+            limit=5,
+        )
 
         all_results = ticket_results + runbook_results + deployment_results
         evidence_refs = [r.get("id", "") for r in all_results]
 
-        # Analyze patterns
         similar_incidents = []
         recurring_patterns = []
         deployment_adjacency = []
@@ -83,23 +74,16 @@ class HistoricalInvestigator:
                 }
             )
 
-            # Pattern detection
-            if (
-                "navigation" in content
-                and ("error" in content or "failure" in content)
-                and "post_update" not in content
-                and "rollback" in content
-            ):
-                recurring_patterns.append("Post-update navigation failure requiring rollback")
+            if ("update" in content or "deployment" in content) and "rollback" in content:
+                recurring_patterns.append("Post-update failure requiring rollback")
 
             if "sensor fusion" in content or "latency" in content:
-                recurring_patterns.append("Sensor fusion latency issues recurring")
+                recurring_patterns.append("Sensor/latency issues recurring")
 
             if "sla" in content or "shipment" in content or "delivery" in content:
-                recurring_patterns.append("Customer-facing SLA impact from navigation issues")
+                recurring_patterns.append("Customer-facing impact from similar incidents")
 
         for result in runbook_results:
-            content = result.get("content", "").lower()
             category = result.get("metadata", {}).get("category", "general")
             known_issues.append(
                 {
@@ -111,18 +95,17 @@ class HistoricalInvestigator:
 
         for result in deployment_results:
             metadata = result.get("metadata", {})
-            if metadata.get("status") == "halted":
+            if metadata.get("status") in ("halted", "in_progress"):
                 deployment_adjacency.append(
                     {
                         "deployment_id": result.get("id"),
                         "from_version": metadata.get("version_from"),
                         "to_version": metadata.get("version_to"),
                         "status": metadata.get("status"),
-                        "pattern": "Issues detected during deployment, deployment halted",
+                        "pattern": "Incident coincides with an active/recent deployment",
                     }
                 )
 
-        # Calculate confidence
         confidence = 0.0
         if similar_incidents:
             confidence += 0.2

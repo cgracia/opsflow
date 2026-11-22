@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.retrieval.client import COLLECTION_NAME, VECTOR_SIZE, QdrantManager
+from app.retrieval.client import COLLECTION_NAME, VECTOR_SIZE, QdrantManager, _point_id
 
 
 class TestQdrantManager:
@@ -59,7 +59,9 @@ class TestQdrantManager:
         assert call_args.kwargs["collection_name"] == COLLECTION_NAME
         points = call_args.kwargs["points"]
         assert len(points) == 1
-        assert points[0].id == "test-1"
+        # Point IDs are deterministic UUIDs; the readable ID lives in the payload.
+        assert points[0].id == _point_id("test-1")
+        assert points[0].payload["doc_id"] == "test-1"
 
     def test_index_documents_batch(self):
         manager = QdrantManager.__new__(QdrantManager)
@@ -91,16 +93,43 @@ class TestSearchFunctions:
         manager = QdrantManager.__new__(QdrantManager)
         manager.client = MagicMock()
         manager._collection_ready = True
+        manager._fake_vector = lambda query: [0.0] * VECTOR_SIZE
 
         mock_point = MagicMock()
-        mock_point.id = "doc-1"
+        mock_point.id = "some-uuid"
         mock_point.score = 0.95
-        mock_point.payload = {"entity_id": "DEV-401", "content": "navigation error"}
+        mock_point.payload = {
+            "doc_id": "doc-1",
+            "entity_id": "DEV-401",
+            "content": "navigation error",
+        }
         manager.client.query_points.return_value = MagicMock(points=[mock_point])
 
         results = await search_evidence("navigation error", manager)
         assert len(results) == 1
+        assert results[0]["id"] == "doc-1"  # readable ID from payload, not the UUID
         assert results[0]["entity_id"] == "DEV-401"
+
+    @pytest.mark.asyncio
+    async def test_search_evidence_uses_prefetch_api(self):
+        """The query must use Prefetch objects (SearchRequest is rejected by
+        qdrant-client >= 1.14 and was silently swallowed in v1)."""
+        from qdrant_client.models import FusionQuery, Prefetch
+
+        from app.retrieval.search import search_evidence
+
+        manager = QdrantManager.__new__(QdrantManager)
+        manager.client = MagicMock()
+        manager._collection_ready = True
+        manager._fake_vector = lambda query: [0.0] * VECTOR_SIZE
+        manager.client.query_points.return_value = MagicMock(points=[])
+
+        await search_evidence("navigation error", manager)
+
+        kwargs = manager.client.query_points.call_args.kwargs
+        assert all(isinstance(p, Prefetch) for p in kwargs["prefetch"])
+        assert isinstance(kwargs["query"], FusionQuery)
+        assert len(kwargs["prefetch"]) == 2  # dense + sparse
 
     @pytest.mark.asyncio
     async def test_search_by_entity_filters_correctly(self):
@@ -109,12 +138,14 @@ class TestSearchFunctions:
         manager = QdrantManager.__new__(QdrantManager)
         manager.client = MagicMock()
         manager._collection_ready = True
+        manager._fake_vector = lambda query: [0.0] * VECTOR_SIZE
 
         mock_point = MagicMock()
-        mock_point.id = "doc-1"
+        mock_point.id = "some-uuid"
         mock_point.score = 0.85
-        mock_point.payload = {"entity_id": "DEV-401"}
+        mock_point.payload = {"doc_id": "doc-1", "entity_id": "DEV-401"}
         manager.client.query_points.return_value = MagicMock(points=[mock_point])
 
         results = await search_by_entity("DEV-401", manager)
         assert len(results) == 1
+        assert results[0]["id"] == "doc-1"

@@ -1,10 +1,14 @@
 """
-Synthetic data seeder for the Meridian Logistics incident narrative.
+Synthetic seed data for three disjoint fixture scenarios.
 
-Scenario: Fleet-wide deployment of software v3.3.0 causes navigation errors
-across 3 devices at Portland Distribution Center. A support ticket, anomaly
-alert, and blocked-device event all arrive within minutes — the system must
-recognize they're the same incident.
+- Scenario A (Meridian Logistics): fleet-wide navigation regression after a
+  software deployment. Strong evidence, high severity, enterprise account →
+  governance classifies ESCALATE and withholds the customer draft.
+- Scenario B (Northwind Cold Chain, ``scenario_northwind.py``): weak evidence,
+  low severity, standard account → governance restricts outputs.
+- Scenario C (Atlas Retail Robotics, ``scenario_atlas.py``): well-evidenced
+  medium-severity regression, enterprise account → governance classifies
+  COMMUNICATE and approves an evidence-grounded customer draft.
 
 All IDs are deterministic for test reproducibility.
 """
@@ -242,11 +246,16 @@ async def seed_operational_events(devices: dict, fleets: dict, sites: dict, acco
 
 
 async def seed_all(session: AsyncSession) -> dict:
-    """Seed all entities and return a dict of all created entities by category.
+    """Seed all entities for the three fixture scenarios and return the map.
 
-    Clears existing data first (idempotent).
+    Scenarios are disjoint — each has its own account, site, fleet, devices
+    and evidence — so distinct investigations can be verified against each
+    other. Clears existing data first (idempotent).
     """
     import sqlalchemy
+
+    from app.seed.scenario_atlas import build as build_atlas
+    from app.seed.scenario_northwind import build as build_northwind
 
     # Clear existing data (reverse dependency order)
     for table in [
@@ -263,7 +272,7 @@ async def seed_all(session: AsyncSession) -> dict:
     ]:
         await session.execute(sqlalchemy.text(f"DELETE FROM {table}"))
 
-    # Seed in dependency order
+    # Scenario A (Meridian) — built by the functions in this module
     accounts = await seed_accounts()
     sites = await seed_sites(accounts)
     revisions = await seed_software_revisions()
@@ -274,26 +283,7 @@ async def seed_all(session: AsyncSession) -> dict:
     incidents = await seed_incidents(accounts)
     tickets = await seed_tickets(accounts, sites, devices, incidents)
     events = await seed_operational_events(devices, fleets, sites, accounts)
-
-    # Persist all
-    all_entities = (
-        list(accounts.values())
-        + list(sites.values())
-        + list(revisions.values())
-        + list(fleets.values())
-        + list(devices.values())
-        + list(deployments.values())
-        + list(services.values())
-        + list(incidents.values())
-        + list(tickets.values())
-        + list(events.values())
-    )
-    for entity in all_entities:
-        session.add(entity)
-
-    await session.flush()
-
-    return {
+    scenario_a = {
         "accounts": accounts,
         "sites": sites,
         "revisions": revisions,
@@ -305,3 +295,32 @@ async def seed_all(session: AsyncSession) -> dict:
         "tickets": tickets,
         "events": events,
     }
+
+    categories = [
+        "accounts",
+        "sites",
+        "revisions",
+        "fleets",
+        "devices",
+        "deployments",
+        "services",
+        "incidents",
+        "tickets",
+        "events",
+    ]
+    merged = {category: {} for category in categories}
+    for scenario in (scenario_a, build_northwind(), build_atlas()):
+        for category in categories:
+            for entity in scenario.get(category, {}).values():
+                # Key by the entity's own ID: semantic keys like
+                # "anomaly_alert" collide across scenarios and silently
+                # drop entities.
+                merged[category][entity.id] = entity
+
+    for category_entities in merged.values():
+        for entity in category_entities.values():
+            session.add(entity)
+
+    await session.flush()
+
+    return merged

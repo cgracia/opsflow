@@ -1,6 +1,6 @@
-# Demo Scenario: Meridian Logistics Navigation Incident
+# Fixture Scenario A: Meridian Logistics Navigation Incident
 
-> **All entities, data, and events in this scenario are synthetic.** Meridian Logistics is a fictional company. No real operational data is used.
+> **All entities, data, and events in this scenario are synthetic.** Meridian Logistics is a fictional company. No real operational data is used. This is one of three disjoint fixture scenarios (see [the README](../README.md#fixture-scenarios)); it exercises the strong-evidence, high-severity path.
 
 ## Scenario
 
@@ -43,10 +43,10 @@ The investigation response includes:
 
 **Governance decision** — The governance engine classifies the action as ESCALATE (high severity, enterprise account). EXECUTE is blocked. Mandatory human-in-the-loop review is flagged.
 
-**Operator briefing** — A structured internal briefing containing entity context, primary hypothesis with confidence, telemetry findings, historical patterns, and governance decision.
+**Operator briefing** — A structured internal briefing containing entity context, primary hypothesis with confidence, telemetry findings, historical patterns, the governance decision, and any output restrictions.
 
-**Customer response draft** — A safe, non-technical summary suitable for external communication.
+**Customer response draft** — Withheld (`null`) in this scenario: governance classifies the incident as ESCALATE (high severity, enterprise account), and ESCALATE does not approve a customer-facing draft. The draft is only emitted when governance classification approves it — see the Atlas scenario in the README for that path — and it is built from the actual evidence, never from a fixed template claiming a root cause or promising a resolution time.
 
-## Viewing the trace in Langfuse
+## Viewing the trace in Langfuse (optional)
 
-Open `http://localhost:3000` (credentials: `opsflow@example.com` / `admin`). Navigate to Traces and select the investigation trace. You'll see nested spans for each of the 7 phases, with evidence retrieved, specialist findings, hypotheses generated, and governance decisions — the full reasoning chain is inspectable end-to-end.
+The observability stack is not started by default. Run `docker compose --profile observability up -d`, configure the Langfuse keys in `.env`, then open `http://localhost:3000`. Navigate to Traces and select the investigation trace. You'll see nested spans for each of the 7 phases, with evidence retrieved, specialist findings, hypotheses generated, and governance decisions — the full reasoning chain is inspectable end-to-end.

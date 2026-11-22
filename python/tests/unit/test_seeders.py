@@ -29,16 +29,30 @@ async def db_session():
 async def test_entity_counts(db_session: AsyncSession):
     result = await seed_all(db_session)
 
-    assert len(result["accounts"]) == 1
-    assert len(result["sites"]) == 1
-    assert len(result["revisions"]) == 2
-    assert len(result["fleets"]) == 1
-    assert len(result["devices"]) == 8
-    assert len(result["deployments"]) == 1
-    assert len(result["services"]) == 1
-    assert len(result["incidents"]) == 1
-    assert len(result["tickets"]) == 1
-    assert len(result["events"]) == 2
+    assert len(result["accounts"]) == 3
+    assert len(result["sites"]) == 3
+    assert len(result["revisions"]) == 5
+    assert len(result["fleets"]) == 3
+    assert len(result["devices"]) == 16
+    assert len(result["deployments"]) == 2
+    assert len(result["services"]) == 3
+    assert len(result["incidents"]) == 3
+    assert len(result["tickets"]) == 3
+    assert len(result["events"]) == 5
+
+
+async def test_scenarios_are_disjoint(db_session: AsyncSession):
+    """The three fixture scenarios must not share any entity."""
+    result = await seed_all(db_session)
+
+    account_ids = {a.account_id for a in result["sites"].values()}
+    assert len(account_ids) == 3
+    assert len({f.account_id for f in result["fleets"].values()}) == 3
+    assert len({t.account_id for t in result["tickets"].values()}) == 3
+    # Every entity key in the merged maps is the entity's own ID.
+    for category, entities in result.items():
+        for key, entity in entities.items():
+            assert key == entity.id, f"{category}: key {key} != id {entity.id}"
 
 
 async def test_ids_are_deterministic(db_session: AsyncSession):
@@ -59,8 +73,8 @@ async def test_ids_are_deterministic(db_session: AsyncSession):
 async def test_narrative_consistency(db_session: AsyncSession):
     result = await seed_all(db_session)
 
-    v330_id = result["revisions"]["v330"].id
-    v321_id = result["revisions"]["v321"].id
+    v330_id = result["revisions"]["SWREV-302"].id
+    v321_id = result["revisions"]["SWREV-301"].id
 
     affected = ["DEV-401", "DEV-402", "DEV-403"]
     healthy = ["DEV-404", "DEV-405", "DEV-406", "DEV-407", "DEV-408"]
@@ -75,11 +89,11 @@ async def test_narrative_consistency(db_session: AsyncSession):
         assert device.software_revision_id == v321_id, f"{dev_id} should be on v3.2.1"
         assert device.status == "active", f"{dev_id} should be active"
 
-    deployment = result["deployments"]["current"]
-    anomaly_event = result["events"]["anomaly_alert"]
-    blocked_event = result["events"]["blocked_device"]
-    incident = result["incidents"]["current"]
-    ticket = result["tickets"]["current"]
+    deployment = result["deployments"]["DEPL-501"]
+    anomaly_event = result["events"]["ALT-2001"]
+    blocked_event = result["events"]["EVT-3001"]
+    incident = result["incidents"]["INC-5001"]
+    ticket = result["tickets"]["TCK-1001"]
 
     assert deployment.started_at < anomaly_event.detected_at
     assert deployment.started_at < blocked_event.detected_at
@@ -95,12 +109,22 @@ async def test_narrative_consistency(db_session: AsyncSession):
 
 def test_evidence_documents_count():
     evidence = get_all_evidence()
-    assert len(evidence) == 11
+    assert len(evidence) == 19
 
     assert len(get_historical_tickets()) == 5
     assert len(get_runbooks()) == 3
     assert len(get_telemetry_snapshots()) == 2
     assert len(get_deployment_manifest()) == 1
+    from app.seed.evidence import get_atlas_evidence, get_northwind_evidence
+
+    assert len(get_northwind_evidence()) == 2
+    assert len(get_atlas_evidence()) == 6
+
+
+def test_evidence_ids_unique_across_scenarios():
+    evidence = get_all_evidence()
+    ids = [doc["id"] for doc in evidence]
+    assert len(ids) == len(set(ids))
 
 
 def test_historical_tickets_exist():
@@ -127,4 +151,4 @@ async def test_seed_database_entry_point(db_session: AsyncSession):
     result = await seed_database(db_session)
     assert "accounts" in result
     assert "devices" in result
-    assert result["accounts"]["meridian"].name == "Meridian Logistics"
+    assert result["accounts"]["ACC-1001"].name == "Meridian Logistics"

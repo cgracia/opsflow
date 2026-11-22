@@ -1,0 +1,9 @@
+# Keep the build context small and the image reproducible.
+.venv
+.pytest_cache
+.ruff_cache
+.sisyphus
+__pycache__
+*.pyc
+opsflow.db
+tests
